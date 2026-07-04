@@ -1,0 +1,15 @@
+# Ryth v0.1.0 — Foundation Release
+#
+# The tokenizer and the Ryth Data Engine (RDE) are PURE PYTHON (standard library
+# only). There are NO required runtime dependencies.
+#
+# Optional extras:
+#   xxhash   -> faster chunk deduplication for very large datasets
+#   pytest   -> run the test suite
+#
+# Install core (nothing needed) + optional:
+#   pip install -e .            # core, no deps
+#   pip install -e ".[fast]"    # + xxhash
+#   pip install -e ".[dev]"     # + pytest
+
+# (intentionally empty for core install)

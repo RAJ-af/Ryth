@@ -1,0 +1,52 @@
+# Roadmap
+
+Ryth is built one solid foundation layer at a time. The data format stays stable
+(and versioned) across model sizes — scaling up mostly means changing config, not
+rewriting the stack.
+
+## Phases
+
+### Phase 1 — Scratch Tokenizer ✅ (v0.1.0)
+From-scratch byte-level BPE tokenizer: training, encode/decode, special tokens,
+save/load, byte fallback. Pure standard library.
+
+### Phase 2 — Ryth Data Engine (RDE) ✅ (v0.1.0)
+Full data pipeline → RDS binary format: cleaning, validation, quality scoring,
+language detection, FIM, smart curriculum, packing, dedup, sharding, checksums,
+manifest lock, reproducibility, and a memory-mapped streaming reader.
+
+### Phase 3 — Training Engine 🔜 (next)
+Pure-PyTorch training loop over RDS datasets: optimizer, LR schedule, loss,
+gradient accumulation, mixed precision, gradient checkpointing, checkpoint
+manager, logging, evaluation (perplexity), resume, and early stopping.
+
+### Phase 4 — 30M Prototype ⏳
+Train the first small model end-to-end to validate the full pipeline
+(data → tokenizer → RDE → model → training → generation).
+
+### Phase 5 — 300M ⏳
+Scale the model and dataset; refine curriculum and data mixture.
+
+### Phase 6 — 1B ⏳
+A larger coding-focused model built on the same foundation.
+
+## RDE v2 (post first-training-run)
+
+Deferred data-engine features, to be added after a successful training run so we
+don't over-engineer ahead of need:
+
+- Repository Graph (README → src → tests → docs relations)
+- Import Graph (dependency understanding)
+- AST Cache (for code search / editing tasks)
+- Dataset Diff (compare dataset versions / changed shards)
+- Token Frequency Cache
+
+## Guiding principles
+
+- **From scratch, auditable, pure standard library** for core components.
+- **Reproducible by default** (manifest lock + deterministic builds).
+- **Low-hardware friendly** (uint16, mmap, sharding, lazy loading).
+- **Backward-compatible format evolution** (versioned RDS).
+- **Don't over-engineer** ahead of a working end-to-end pipeline.
+
+_Timelines are intentionally omitted; this is a from-scratch research project._

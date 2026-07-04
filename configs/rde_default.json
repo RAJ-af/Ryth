@@ -1,0 +1,22 @@
+{
+  "_comment": "Reference values mirroring dataset.config.RDEConfig defaults. Apply by passing these as keyword args to RDEConfig(...). See configs/README.md.",
+  "seq_len": 4096,
+  "overlap": 0,
+  "vocab_size": 32768,
+  "tokenizer_version": 1,
+  "add_bos": true,
+  "add_eos": true,
+  "shard_max_bytes": 1073741824,
+  "rds_version": 1,
+  "min_file_bytes": 8,
+  "max_file_bytes": 1048576,
+  "min_quality": 0,
+  "dedup_files": true,
+  "dedup_chunks": true,
+  "seed": 1234,
+  "fim_enabled": true,
+  "fim_rate": 0.5,
+  "fim_min_chars": 60,
+  "dataset_version": "0.1.0",
+  "model_version": "ryth-30m"
+}

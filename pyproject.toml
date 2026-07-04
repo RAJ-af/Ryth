@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ryth"
+version = "0.1.0"
+description = "Ryth — a coding-first LLM built from scratch: a scratch byte-level BPE tokenizer and the Ryth Data Engine (RDE)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "RAJ-af" }]
+keywords = ["llm", "tokenizer", "bpe", "dataset", "machine-learning", "code-model"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Core RDE + tokenizer are pure standard library — no required runtime deps.
+dependencies = []
+
+[project.optional-dependencies]
+fast = ["xxhash>=3.0"]          # faster chunk dedup (optional)
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/RAJ-af/Ryth"
+Repository = "https://github.com/RAJ-af/Ryth"
+Issues = "https://github.com/RAJ-af/Ryth/issues"
+
+[project.scripts]
+ryth-tokenizer = "tokenizer.cli:main"
+ryth-rde = "dataset.cli:main"
+
+[tool.setuptools]
+packages = ["tokenizer", "dataset"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

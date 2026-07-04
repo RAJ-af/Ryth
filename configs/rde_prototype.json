@@ -1,0 +1,13 @@
+{
+  "_comment": "A small/prototype configuration: shorter sequences, smaller shards, smaller vocab. Good for quick experiments on modest hardware.",
+  "seq_len": 1024,
+  "overlap": 0,
+  "vocab_size": 8000,
+  "shard_max_bytes": 268435456,
+  "min_quality": 0,
+  "fim_enabled": true,
+  "fim_rate": 0.5,
+  "seed": 1234,
+  "dataset_version": "0.1.0",
+  "model_version": "ryth-30m"
+}
