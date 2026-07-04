@@ -28,7 +28,8 @@ dependencies = []
 
 [project.optional-dependencies]
 fast = ["xxhash>=3.0"]          # faster chunk dedup (optional)
-dev = ["pytest>=7.0"]
+model = ["torch>=2.1"]          # required for the model core (model/ package)
+dev = ["pytest>=7.0", "torch>=2.1"]
 
 [project.urls]
 Homepage = "https://github.com/RAJ-af/Ryth"
@@ -40,7 +41,7 @@ ryth-tokenizer = "tokenizer.cli:main"
 ryth-rde = "dataset.cli:main"
 
 [tool.setuptools]
-packages = ["tokenizer", "dataset"]
+packages = ["tokenizer", "dataset", "model", "model.attention"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

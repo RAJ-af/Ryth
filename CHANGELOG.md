@@ -3,6 +3,39 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — Model Core — 2026-07-04
+
+The transformer model core, from scratch in pure PyTorch. Requires PyTorch
+(`pip install -e ".[model]"`); the tokenizer + data engine remain dependency-free.
+
+### Model core (`model/` package)
+- **`RythConfig`** — single config with presets (30M/125M/350M/1B), version fields
+  (`model_version`, `architecture_version`, `checkpoint_version`), and feature
+  flags (`use_flash_attention`, `use_qk_norm`, `use_gradient_checkpointing`,
+  `attention_backend`).
+- **RoPE** — rotary positional embeddings, configurable theta, KV-cache offset aware.
+- **RMSNorm** — float32-stable normalization.
+- **SwiGLU** — gated feed-forward.
+- **Attention factory** — `model/attention/`: `BaseAttention` interface, **GQA**
+  (Grouped-Query Attention) with KV-cache + SDPA/FlashAttention + manual fallback,
+  and an **MLA** stub (`NotImplementedError`) reserved for the future.
+- **Initialization module** — xavier / llama / deepseek schemes (llama default,
+  residual projections scaled by `1/√(2·n_layers)`); `ryth` reserved for future.
+- **Hooks** — `before_attention` / `after_attention` / `before_ffn` / `after_ffn`
+  per block, for research and debugging.
+- **Metrics** — parameters, trainable params, estimated FLOPs, KV-cache size,
+  activation memory, context length.
+- **Checkpoint metadata** — model/tokenizer/dataset/RDS versions, git commit,
+  PyTorch version, full config (`model/checkpoint.py`).
+- **Decoder + causal LM** — `RythDecoder`, `RythForCausalLM` with weight tying.
+- **Generation** — autoregressive sampling with KV-cache (greedy / temperature / top-k).
+- **Benchmarks** — `benchmarks/forward.py`, `memory.py`, `speed.py` (CPU / GPU).
+- **Tests** — 37 unit tests (KV-cache == full-forward equivalence, causality,
+  weight tying, flash-vs-manual parity, hooks, gradient checkpointing, and more).
+
+### Not included (see [ROADMAP.md](ROADMAP.md))
+- Training loop (Phase 4 — Training Engine).
+
 ## [0.1.0] — Foundation Release — 2026-07-03
 
 The first public release. Ships the two foundational pillars of Ryth: a

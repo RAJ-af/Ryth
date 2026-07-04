@@ -15,19 +15,26 @@ Full data pipeline → RDS binary format: cleaning, validation, quality scoring,
 language detection, FIM, smart curriculum, packing, dedup, sharding, checksums,
 manifest lock, reproducibility, and a memory-mapped streaming reader.
 
-### Phase 3 — Training Engine 🔜 (next)
+### Phase 3 — Model Core ✅ (v0.2.0)
+Decoder-only transformer from scratch (pure PyTorch): RythConfig, RoPE, RMSNorm,
+SwiGLU, Grouped-Query Attention with KV-cache and a FlashAttention (SDPA) path.
+Pluggable **attention factory** (GQA + MLA-future stub), init schemes
+(xavier/llama/deepseek), feature flags, hooks, metrics, checkpoint metadata, and
+generation. Presets 30M → 1B. Unit tests + benchmarks.
+
+### Phase 4 — Training Engine 🔜 (next)
 Pure-PyTorch training loop over RDS datasets: optimizer, LR schedule, loss,
 gradient accumulation, mixed precision, gradient checkpointing, checkpoint
 manager, logging, evaluation (perplexity), resume, and early stopping.
 
-### Phase 4 — 30M Prototype ⏳
+### Phase 5 — 30M Prototype ⏳
 Train the first small model end-to-end to validate the full pipeline
 (data → tokenizer → RDE → model → training → generation).
 
-### Phase 5 — 300M ⏳
+### Phase 6 — 300M ⏳
 Scale the model and dataset; refine curriculum and data mixture.
 
-### Phase 6 — 1B ⏳
+### Phase 7 — 1B ⏳
 A larger coding-focused model built on the same foundation.
 
 ## RDE v2 (post first-training-run)

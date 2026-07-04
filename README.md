@@ -181,6 +181,24 @@ no unknown tokens (byte fallback). BPE then learns merges for the most frequent
 patterns in your corpus, compressing common code sequences into single tokens.
 Details: **[docs/tokenizer.md](docs/tokenizer.md)**.
 
+## Model core (v0.2.0)
+
+A decoder-only transformer built from scratch in pure PyTorch (`model/` package,
+`pip install -e ".[model]"`): RoPE, RMSNorm, SwiGLU, **Grouped-Query Attention**
+with KV-cache and a FlashAttention (SDPA) path. Extensible by design — a pluggable
+**attention factory** (GQA now, MLA reserved), configurable init schemes, feature
+flags, research hooks, metrics, and checkpoint metadata. Scale 30M → 1B via
+`RythConfig` presets.
+
+```python
+import torch
+from model import RythConfig, RythForCausalLM, generate
+model = RythForCausalLM(RythConfig.ryth_30m(vocab_size=32000))
+logits, _ = model(torch.randint(0, 32000, (1, 16)))
+```
+
+Details: **[docs/model.md](docs/model.md)**.
+
 ## CLI Reference
 
 Ryth installs two console commands. Below is the exact `--help` output for every
@@ -336,12 +354,12 @@ options:
 
 | Phase | Milestone | Status |
 |-------|-----------|--------|
-| 1 | Scratch Tokenizer | ✅ Done |
-| 2 | Ryth Data Engine (RDE) | ✅ Done |
-| 3 | Training Engine | 🔜 Next |
-| 4 | 30M Prototype | ⏳ Planned |
-| 5 | 300M | ⏳ Planned |
-| 6 | 1B | ⏳ Planned |
+| 1 | Scratch Tokenizer | ✅ Done (v0.1.0) |
+| 2 | Ryth Data Engine (RDE) | ✅ Done (v0.1.0) |
+| 3 | Model Core (transformer) | ✅ Done (v0.2.0) |
+| 4 | Training Engine | 🔜 Next |
+| 5 | 30M Prototype | ⏳ Planned |
+| 6 | 300M / 1B | ⏳ Planned |
 
 See [ROADMAP.md](ROADMAP.md).
 
