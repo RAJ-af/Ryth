@@ -32,6 +32,15 @@ and production-quality. Requires PyTorch (`pip install -e ".[train]"`).
 - **28 unit tests** (real PyTorch), incl. end-to-end training (loss decreases),
   auto-resume, and early-stop wiring.
 
+### Kaggle end-to-end (tooling)
+- **`notebooks/ryth_kaggle_train.ipynb`** — one notebook that runs the whole stack
+  on a free Kaggle **T4** GPU: corpus → tokenizer → RDS → 30M model → training →
+  checkpoint → **resume** → **code generation**. Self-contained (synthetic smoke
+  corpus) and uses only the public library — no core changes.
+- **`scripts/kaggle_train.py`** — the same pipeline as one command
+  (`--smoke` for a fast test, `--raw <dir>` for a real run).
+- Auto-selects **fp16 on T4** (Turing has no native bf16) and **bf16 on Ampere+**.
+
 ### Notes
 - Model core (v0.2.0) unchanged. Next: train the 30M prototype (ROADMAP Phase 5).
 

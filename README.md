@@ -196,9 +196,10 @@ Ryth/
 │   ├── logger.py checkpoint.py callbacks.py profiler.py benchmark.py
 │   └── cli.py           #   ryth-train
 ├── docs/                # architecture, tokenizer, dataset engine, RDS, model, training, quickstart, faq
+├── notebooks/           # end-to-end Kaggle training notebook (T4 GPU)
 ├── examples/            # runnable example scripts
 ├── tests/               # pytest suite (core is pure stdlib; model/training need torch)
-├── scripts/             # convenience shell scripts
+├── scripts/             # convenience scripts (incl. kaggle_train.py)
 └── configs/             # reference config values
 ```
 
@@ -278,6 +279,12 @@ Trainer(TrainConfig(data_dir="rds_out", model_preset="ryth_30m",
 ryth-train --data_dir rds_out --model_preset ryth_30m --max_steps 2000 --dtype bf16
 ryth-train --data_dir rds_out --resume latest      # auto-resume
 ```
+
+**Run the whole stack on Kaggle (free T4 GPU):** an end-to-end notebook —
+corpus → tokenizer → RDS → 30M model → train → checkpoint → resume → generate —
+in [`notebooks/ryth_kaggle_train.ipynb`](notebooks/ryth_kaggle_train.ipynb)
+(or the one-command [`scripts/kaggle_train.py`](scripts/kaggle_train.py)). See
+[`notebooks/README.md`](notebooks/README.md).
 
 Details: **[docs/training.md](docs/training.md)**.
 

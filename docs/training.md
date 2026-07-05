@@ -75,6 +75,17 @@ model = RythForCausalLM(RythConfig(vocab_size=..., d_model=256, n_layers=4))
 Trainer(TrainConfig(data_dir="rds_out"), model=model).train()
 ```
 
+## Run on Kaggle (T4 GPU)
+
+An end-to-end notebook runs the whole pipeline — corpus → tokenizer → RDS → 30M
+model → training → checkpoint → resume → generation — on a free Kaggle T4, without
+touching the core library: [`notebooks/ryth_kaggle_train.ipynb`](../notebooks/ryth_kaggle_train.ipynb)
+(one-command equivalent: `python scripts/kaggle_train.py --smoke`). Setup and a
+"scale to a real run" guide are in [`notebooks/README.md`](../notebooks/README.md).
+
+> T4 is Turing (sm_75) — **no native bf16**. The notebook/script auto-select
+> **fp16** on T4 and **bf16** on Ampere+ GPUs.
+
 ## Checkpoints & resume
 
 Each checkpoint stores model + optimizer + step + best_val + RNG states + config +
