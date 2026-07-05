@@ -15,7 +15,7 @@ import torch.nn as nn
 from .config import RythConfig
 from .embedding import TokenEmbedding
 from .hooks import HOOK_POINTS
-from .init import apply_init
+from .init import apply_init, init_output_weight
 from .lm_head import LMHead
 from .rmsnorm import RMSNorm
 from .rope import RotaryEmbedding
@@ -68,6 +68,10 @@ class RythForCausalLM(nn.Module):
         self.lm_head = LMHead(config.d_model, config.vocab_size,
                               tied_weight=tied, init_std=config.init_std)
         apply_init(self, config)               # ② central weight init (scheme from config)
+        # Untied lm_head weight is a bare Parameter (not a Linear/Embedding module),
+        # so apply_init's module-walk skips it — init it with the scheme explicitly.
+        if not config.tie_embeddings:
+            init_output_weight(self.lm_head.weight, config)
 
     def forward(self, input_ids, past_kvs=None, use_cache=False):
         """returns : (logits [B, T, vocab_size], new_caches or None)"""

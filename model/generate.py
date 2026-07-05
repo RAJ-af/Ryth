@@ -17,24 +17,24 @@ def generate(model, input_ids, *, max_new_tokens: int = 50,
     """
     input_ids : [B, T] long (prompt)
     returns   : [B, T + n] long (prompt + generated), n <= max_new_tokens
+
+    Note: `eos_id` early-stop triggers only when ALL sequences in the batch have
+    emitted EOS. For per-sequence stopping, generate with batch size 1.
     """
     model.eval()
-    device = input_ids.device
     out = input_ids
     past = None
     cur = input_ids
     for _ in range(max_new_tokens):
         logits, past = model(cur, past_kvs=past, use_cache=True)
         logits = logits[:, -1, :]
-        if temperature != 1.0:
-            logits = logits / max(1e-6, temperature)
         if top_k:
             v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
             logits = logits.masked_fill(logits < v[:, [-1]], float("-inf"))
         if temperature == 0.0:
-            nxt = logits.argmax(dim=-1, keepdim=True)       # greedy
+            nxt = logits.argmax(dim=-1, keepdim=True)        # greedy
         else:
-            probs = F.softmax(logits, dim=-1)
+            probs = F.softmax(logits / temperature, dim=-1)
             nxt = torch.multinomial(probs, num_samples=1)
         out = torch.cat((out, nxt), dim=1)
         cur = nxt                                            # only new token (cache)

@@ -452,6 +452,80 @@ def test_generate_greedy_deterministic():
     assert torch.equal(a, b)                        # greedy => deterministic
 
 
+# ======================================================================== #
+# Module 13 — robustness / edge cases (adversarial)
+# ======================================================================== #
+def test_qk_norm_kv_cache_equivalence():
+    cfg = tiny_config(use_qk_norm=True)
+    model = RythForCausalLM(cfg).eval()
+    ids = torch.randint(0, cfg.vocab_size, (1, 10))
+    with torch.no_grad():
+        full, _ = model(ids)
+        past, steps = None, []
+        for t in range(10):
+            o, past = model(ids[:, t:t + 1], past_kvs=past, use_cache=True)
+            steps.append(o)
+        inc = torch.cat(steps, dim=1)
+    assert torch.allclose(full, inc, atol=1e-4)
+
+
+def test_batch_kv_cache_equivalence():
+    cfg = tiny_config()
+    model = RythForCausalLM(cfg).eval()
+    ids = torch.randint(0, cfg.vocab_size, (4, 8))
+    with torch.no_grad():
+        full, _ = model(ids)
+        past, steps = None, []
+        for t in range(8):
+            o, past = model(ids[:, t:t + 1], past_kvs=past, use_cache=True)
+            steps.append(o)
+        inc = torch.cat(steps, dim=1)
+    assert torch.allclose(full, inc, atol=1e-4)
+
+
+def test_all_init_schemes_forward_finite():
+    for scheme in ["xavier", "llama", "deepseek"]:
+        model = RythForCausalLM(tiny_config(init_scheme=scheme)).eval()
+        out, _ = model(torch.randint(0, tiny_config().vocab_size, (1, 5)))
+        assert torch.isfinite(out).all()
+
+
+def test_seq_len_one():
+    cfg = tiny_config()
+    model = RythForCausalLM(cfg).eval()
+    out, _ = model(torch.randint(0, cfg.vocab_size, (1, 1)))
+    assert out.shape == (1, 1, cfg.vocab_size)
+
+
+def test_generate_zero_tokens():
+    cfg = tiny_config()
+    model = RythForCausalLM(cfg).eval()
+    prompt = torch.randint(0, cfg.vocab_size, (1, 3))
+    assert torch.equal(generate(model, prompt, max_new_tokens=0), prompt)
+
+
+def test_untied_lm_head_is_initialized():
+    """Untied lm_head weight must be scheme-initialized, not left at defaults."""
+    for scheme in ["llama", "xavier", "deepseek"]:
+        cfg = tiny_config(tie_embeddings=False, init_scheme=scheme)
+        model = RythForCausalLM(cfg)
+        w = model.lm_head.weight
+        assert w.data_ptr() != model.decoder.embed.weight.data_ptr()   # untied
+        assert torch.isfinite(w).all() and w.abs().sum() > 0           # not zeros
+        # std should be in a sane init range (not left as empty()/garbage)
+        assert 1e-4 < w.std().item() < 1.0, (scheme, w.std().item())
+
+
+def test_all_params_receive_grad():
+    cfg = tiny_config()
+    model = RythForCausalLM(cfg).train()
+    out, _ = model(torch.randint(0, cfg.vocab_size, (2, 8)))
+    out.sum().backward()
+    missing = [n for n, p in model.named_parameters()
+               if p.requires_grad and p.grad is None]
+    assert missing == [], f"params without grad: {missing}"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]

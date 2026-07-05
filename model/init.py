@@ -21,6 +21,24 @@ import torch.nn as nn
 _RESIDUAL_SUFFIXES = ("o_proj.weight", "w_down.weight")
 
 
+def base_std(config) -> float:
+    """Per-scheme base std for a generic weight."""
+    return 0.006 if config.init_scheme == "deepseek" else config.init_std
+
+
+def init_output_weight(weight, config) -> None:
+    """Initialize a bare output-projection weight (e.g. an untied LM head).
+
+    Untied lm_head.weight is a plain Parameter (not a Linear/Embedding module),
+    so the module-walk in apply_init skips it — init it explicitly here so it
+    respects config.init_scheme.
+    """
+    if config.init_scheme == "xavier":
+        nn.init.xavier_normal_(weight)
+    else:
+        nn.init.normal_(weight, mean=0.0, std=base_std(config))
+
+
 def _normal_linears_and_embeddings(model, std):
     for module in model.modules():
         if isinstance(module, nn.Linear):
