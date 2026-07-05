@@ -29,6 +29,7 @@ dependencies = []
 [project.optional-dependencies]
 fast = ["xxhash>=3.0"]          # faster chunk dedup (optional)
 model = ["torch>=2.1"]          # required for the model core (model/ package)
+train = ["torch>=2.1"]          # training engine (training/ package); + optional tensorboard
 dev = ["pytest>=7.0", "torch>=2.1"]
 
 [project.urls]
@@ -39,9 +40,10 @@ Issues = "https://github.com/RAJ-af/Ryth/issues"
 [project.scripts]
 ryth-tokenizer = "tokenizer.cli:main"
 ryth-rde = "dataset.cli:main"
+ryth-train = "training.cli:main"
 
 [tool.setuptools]
-packages = ["tokenizer", "dataset", "model", "model.attention"]
+packages = ["tokenizer", "dataset", "model", "model.attention", "training"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

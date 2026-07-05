@@ -3,6 +3,38 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — Training Engine — 2026-07-05
+
+Pure-PyTorch training engine for the Ryth model core, over RDS datasets. Modular
+and production-quality. Requires PyTorch (`pip install -e ".[train]"`).
+
+### Training engine (`training/` package)
+- **`TrainConfig`** — single config controlling the whole run.
+- **AdamW optimizer** factory with decay/no-decay param groups (fused on CUDA).
+- **Warmup + cosine** scheduler factory.
+- **Gradient**: accumulation, clipping, and **NaN/Inf detection & skip**.
+- **Mixed precision**: bf16 / fp16 autocast + GradScaler (fp16).
+- **Gradient checkpointing** (via model core flag).
+- **Loss**: causal-LM cross entropy + perplexity.
+- **Dataloader**: RDSDataset → next-token batches, deterministic train/val split.
+- **Curriculum learning**: RDE difficulty metadata → easy→hard ordering.
+- **Evaluator**: validation loss + perplexity.
+- **Logger**: console + JSONL + optional TensorBoard.
+- **Checkpoint manager**: save/load, **auto-resume** (`latest.pt`), `keep_last`
+  rotation, `best.pt`/`final.pt`, and **experiment metadata** (git commit,
+  tokenizer hash, dataset version, model version, torch version, seed).
+- **Callbacks**: extensible callback system + `EarlyStopping`.
+- **Profiler**: `torch.profiler` wrapper.
+- **Trainer**: the loop; also accepts an injected model (fine-tuning / custom sizes).
+- **Metrics**: throughput + running averages.
+- **Benchmark** (`training/benchmark.py`) and **CLI** (`ryth-train`).
+- **Determinism**: seed + optional deterministic mode. CPU & GPU.
+- **28 unit tests** (real PyTorch), incl. end-to-end training (loss decreases),
+  auto-resume, and early-stop wiring.
+
+### Notes
+- Model core (v0.2.0) unchanged. Next: train the 30M prototype (ROADMAP Phase 5).
+
 ## [0.2.0] — Model Core — 2026-07-04
 
 The transformer model core, from scratch in pure PyTorch. Requires PyTorch

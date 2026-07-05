@@ -199,6 +199,27 @@ logits, _ = model(torch.randint(0, 32000, (1, 16)))
 
 Details: **[docs/model.md](docs/model.md)**.
 
+## Training engine (v0.3.0)
+
+Pure-PyTorch training over RDS datasets (`training/` package,
+`pip install -e ".[train]"`): AdamW, warmup+cosine schedule, gradient
+accumulation & clipping, bf16/fp16, gradient checkpointing, NaN detection,
+auto-resume, checkpoint manager, JSON+TensorBoard logging, validation +
+perplexity, early stopping, curriculum learning (RDE difficulty), and experiment
+tracking (git commit, tokenizer hash, dataset/model version). CPU & GPU.
+
+```python
+from training import TrainConfig, Trainer
+Trainer(TrainConfig(data_dir="rds_out", model_preset="ryth_30m",
+                    dtype="bf16", max_steps=2000)).train()
+```
+```bash
+ryth-train --data_dir rds_out --model_preset ryth_30m --max_steps 2000 --dtype bf16
+ryth-train --data_dir rds_out --resume latest      # auto-resume
+```
+
+Details: **[docs/training.md](docs/training.md)**.
+
 ## CLI Reference
 
 Ryth installs two console commands. Below is the exact `--help` output for every
@@ -357,8 +378,8 @@ options:
 | 1 | Scratch Tokenizer | ✅ Done (v0.1.0) |
 | 2 | Ryth Data Engine (RDE) | ✅ Done (v0.1.0) |
 | 3 | Model Core (transformer) | ✅ Done (v0.2.0) |
-| 4 | Training Engine | 🔜 Next |
-| 5 | 30M Prototype | ⏳ Planned |
+| 4 | Training Engine | ✅ Done (v0.3.0) |
+| 5 | 30M Prototype | 🔜 Next |
 | 6 | 300M / 1B | ⏳ Planned |
 
 See [ROADMAP.md](ROADMAP.md).

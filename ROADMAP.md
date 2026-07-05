@@ -22,12 +22,13 @@ Pluggable **attention factory** (GQA + MLA-future stub), init schemes
 (xavier/llama/deepseek), feature flags, hooks, metrics, checkpoint metadata, and
 generation. Presets 30M → 1B. Unit tests + benchmarks.
 
-### Phase 4 — Training Engine 🔜 (next)
-Pure-PyTorch training loop over RDS datasets: optimizer, LR schedule, loss,
-gradient accumulation, mixed precision, gradient checkpointing, checkpoint
-manager, logging, evaluation (perplexity), resume, and early stopping.
+### Phase 4 — Training Engine ✅ (v0.3.0)
+Pure-PyTorch training over RDS datasets: AdamW, warmup+cosine schedule, gradient
+accumulation & clipping, bf16/fp16, gradient checkpointing, NaN detection,
+auto-resume, checkpoint manager, JSON+TensorBoard logging, validation +
+perplexity, early stopping, curriculum learning, and experiment tracking. CPU & GPU.
 
-### Phase 5 — 30M Prototype ⏳
+### Phase 5 — 30M Prototype 🔜 (next)
 Train the first small model end-to-end to validate the full pipeline
 (data → tokenizer → RDE → model → training → generation).
 
