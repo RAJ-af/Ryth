@@ -1,8 +1,21 @@
 # Architecture
 
-Ryth's Foundation Release has two independent, composable pillars: the
-**tokenizer** and the **Ryth Data Engine (RDE)**. They share a tiny interface —
-the tokenizer's `encode`/`decode` — and are otherwise decoupled.
+Ryth is built as four independent, composable pillars: the **tokenizer**, the
+**Ryth Data Engine (RDE)**, the **model core**, and the **training engine**. Each
+has a small, well-defined interface, so a layer can be understood — or replaced —
+without touching the others.
+
+| Pillar | Package | Since | Depends on |
+|--------|---------|-------|------------|
+| Tokenizer | `tokenizer/` | v0.1.0 | standard library only |
+| Ryth Data Engine (RDE) | `dataset/` | v0.1.0 | standard library only |
+| Model Core | `model/` | v0.2.0 | PyTorch |
+| Training Engine | `training/` | v0.3.0 | PyTorch |
+
+The tokenizer and RDE share the tokenizer's `encode`/`decode` interface. The
+training engine consumes RDE's `RDSDataset` and drives the model core — the model
+never imports the trainer, and the trainer treats the model as a plain
+`nn.Module`, so custom models can be trained too.
 
 ## High-level flow
 
@@ -30,6 +43,26 @@ the tokenizer's `encode`/`decode` — and are otherwise decoupled.
                                │
                                ▼
                 RDSDataset  (mmap, random access, streaming)
+                               │
+                               ▼
+   ┌───────────────────────────────────────────────────────────┐
+   │                    Training Engine                         │
+   │                                                            │
+   │  dataloader ─► loss ─► gradient (accum / clip / NaN-skip)   │
+   │     │                                                      │
+   │     ▼                                                      │
+   │  AdamW ─► warmup+cosine ─► mixed precision (bf16/fp16)      │
+   │     │                                                      │
+   │     ▼                                                      │
+   │  evaluator (loss+ppl) ─► logger ─► checkpoint (+resume)     │
+   │     │                              ─► callbacks (early stop)│
+   │     ▼                                                      │
+   │  drives ▼                                                  │
+   │  ┌─────────────────────────────────────────────────────┐  │
+   │  │  Model Core — decoder-only transformer               │ │
+   │  │  RoPE · RMSNorm · SwiGLU · GQA + KV-cache (30M→1B)    │ │
+   │  └─────────────────────────────────────────────────────┘  │
+   └───────────────────────────────────────────────────────────┘
 ```
 
 ## Design principles
@@ -71,6 +104,8 @@ the tokenizer's `encode`/`decode` — and are otherwise decoupled.
 | **RDSDataset** | training-time reader: streaming, lazy, deterministic shuffle, multi-worker |
 | **Stats / Report** | packing statistics + JSON/HTML validation report |
 | **Manifest Lock** | reproducibility metadata |
+| **Model Core** (`model/`) | decoder-only transformer: RoPE, RMSNorm, SwiGLU, GQA + KV-cache, generation |
+| **Training Engine** (`training/`) | AdamW, warmup+cosine, mixed precision, grad accum/clip, checkpoint/resume, curriculum, eval |
 
 ## Package layout
 
@@ -78,6 +113,12 @@ the tokenizer's `encode`/`decode` — and are otherwise decoupled.
 - `dataset/` — depends only on the standard library. The only place it touches
   the tokenizer is `tokenizer_adapter.load_bpe_tokenizer()`, imported on demand,
   so RDE can run with the built-in `ByteTokenizer` fallback alone.
+- `model/` — pure PyTorch; depends on nothing else in Ryth. A `RythConfig` +
+  `RythForCausalLM` you can import and run on its own.
+- `training/` — pure PyTorch; consumes `dataset/`'s `RDSDataset` and trains any
+  `nn.Module` (the model core by default). It imports the model only to build one
+  from a preset when you don't pass your own.
 
 See [dataset_engine.md](dataset_engine.md) and [tokenizer.md](tokenizer.md) for
-component-level detail, and [rds_format.md](rds_format.md) for the binary layout.
+data-side detail, [model.md](model.md) and [training.md](training.md) for the
+PyTorch side, and [rds_format.md](rds_format.md) for the binary layout.

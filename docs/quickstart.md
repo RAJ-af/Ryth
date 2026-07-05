@@ -1,7 +1,8 @@
 # Quick Start
 
-A step-by-step walkthrough from clone to a verified RDS dataset. Every command is
-documented. Requires **Python 3.9+**.
+A step-by-step walkthrough from clone to a verified RDS dataset **and a first
+training run**. Every command is documented. Requires **Python 3.9+** (the
+tokenizer + data engine are dependency-free; training needs **PyTorch**).
 
 ## 1. Clone
 
@@ -15,18 +16,21 @@ cd Ryth
 Core install has **no dependencies** (pure standard library):
 
 ```bash
-pip install -e .            # core
-pip install -e ".[dev]"     # + pytest (to run the test suite)
+pip install -e .            # core: tokenizer + RDE
 pip install -e ".[fast]"    # + xxhash (faster chunk dedup, optional)
+pip install -e ".[train]"   # + torch (model core + training engine)
+pip install -e ".[dev]"     # + pytest + torch (to run the full test suite)
 ```
 
-This adds two CLI tools to your environment: `ryth-tokenizer` and `ryth-rde`.
+This adds three CLI tools to your environment: `ryth-tokenizer`, `ryth-rde`, and
+`ryth-train` (the last needs the `[train]` extra).
 
 Verify the install:
 
 ```bash
 ryth-tokenizer --help
 ryth-rde --help
+ryth-train --help          # needs pip install -e ".[train]"
 ```
 
 ## 3. Get some code to train on
@@ -114,7 +118,40 @@ ryth-rde manifest rds_out          # manifest + reproducibility lock
 
 Open `rds_out/report.html` in a browser for the full validation report.
 
-## 8. Run the examples / tests
+## 8. Train a model (needs PyTorch)
+
+Install the training extra, then launch a run over your RDS dataset:
+
+```bash
+pip install -e ".[train]"
+
+ryth-train \
+    --data_dir rds_out \
+    --model_preset ryth_30m \
+    --seq_len 1024 \
+    --micro_batch_size 8 --grad_accum_steps 4 \
+    --max_steps 2000 \
+    --dtype bf16 \
+    --out_dir runs/ryth
+```
+
+- `--model_preset` — `ryth_30m` | `ryth_125m` | `ryth_350m` | `ryth_1b`
+- `--micro_batch_size` × `--grad_accum_steps` — the effective batch size
+- `--dtype` — `bf16` | `fp16` | `fp32` (mixed precision on GPU)
+- `--out_dir` — where checkpoints + JSONL logs are written
+
+Checkpoints (`latest.pt`, `best.pt`, `final.pt`) land in `--out_dir`. Resume an
+interrupted run at any time:
+
+```bash
+ryth-train --data_dir rds_out --resume latest
+```
+
+> On CPU, start tiny (small preset, low `--max_steps`) — CPU training is for
+> smoke-testing the pipeline; use a GPU for real runs. Full details:
+> [training.md](training.md).
+
+## 9. Run the examples / tests
 
 ```bash
 python examples/example_train_tokenizer.py
@@ -141,4 +178,21 @@ ds = RDSDataset("rds_out")
 print(len(ds), "chunks; checksums:", ds.verify())
 ```
 
-Next: read [dataset_engine.md](dataset_engine.md) and [tokenizer.md](tokenizer.md).
+And to train (needs PyTorch):
+
+```python
+from training import TrainConfig, Trainer
+
+Trainer(TrainConfig(
+    data_dir="rds_out",
+    model_preset="ryth_30m",
+    seq_len=1024,
+    micro_batch_size=8, grad_accum_steps=4,   # effective batch 32
+    max_steps=2000,
+    dtype="bf16",
+    curriculum=True,                          # easy→hard (RDE difficulty)
+)).train()
+```
+
+Next: read [dataset_engine.md](dataset_engine.md), [tokenizer.md](tokenizer.md),
+[model.md](model.md), and [training.md](training.md).

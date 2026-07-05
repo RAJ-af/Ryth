@@ -1,89 +1,95 @@
-# Release Checklist — v0.1.0 "Foundation Release"
+# Release Checklist
 
-Use this before publishing the first public release of Ryth.
+A reusable pre-release checklist for Ryth. Current release: **v0.3.0** (scratch
+tokenizer + Ryth Data Engine + model core + training engine). Copy the version
+into the boxes below for each new release.
 
 ## 0. Security (do this first) 🔒
 
-- [ ] **Revoke the GitHub Personal Access Token that was shared in chat** at
-      https://github.com/settings/tokens, and **change the account password.**
-      A token pasted into a chat/log must be treated as compromised.
+- [ ] **Revoke any GitHub token / password that was ever shared in chat or a log**
+      at https://github.com/settings/tokens, and change the account password.
+      A credential pasted into a chat/log must be treated as compromised.
 - [ ] Confirm **no secrets** are in the repo:
       ```bash
       git grep -nE 'ghp_|github_pat_|password|secret|BEGIN .*PRIVATE KEY' || echo "clean"
       ```
-- [ ] `.gitignore` excludes secrets, datasets, and build artifacts (it does).
+- [ ] `.gitignore` excludes secrets, datasets, checkpoints (`*.pt`), and build
+      artifacts (it does).
+- [ ] Push over **SSH** (`git@github.com:RAJ-af/Ryth.git`) — no token in any file,
+      command, or commit.
 
 ## 1. Scope
 
-- [x] Release contains **only implemented, tested** components: the scratch
-      tokenizer and RDE v1.1.
-- [x] Model and training engine are **not** shipped (Phase 3+ on the roadmap).
-- [x] Documentation reflects the code exactly — no unimplemented features.
+- [ ] Release contains **only implemented, tested** components.
+- [ ] Current pillars: scratch **tokenizer**, **RDE** v1.1, **model core**
+      (v0.2.0), **training engine** (v0.3.0).
+- [ ] Documentation reflects the code exactly — no unimplemented features claimed.
 
 ## 2. Code quality
 
-- [x] `python -m py_compile` passes for all packages, tests, examples.
-- [x] No unused imports (AST scan clean).
-- [x] No `TODO`/`FIXME`/`XXX`/`HACK` left in code.
-- [x] No stray references to old module paths (`pycoder`, `rde`, `demo`).
-- [x] No duplicate modules.
-- [x] Library code has no debug prints (CLI/verbose output is intentional).
+- [ ] `python -m py_compile` passes for all packages, tests, examples.
+- [ ] No unused imports (AST scan clean).
+- [ ] No `TODO`/`FIXME`/`XXX`/`HACK` left in code.
+- [ ] No stray references to old module paths (`pycoder`, `rde`, `demo`).
+- [ ] No duplicate modules; library code has no debug prints (CLI output is intentional).
 
 ## 3. Tests
 
-- [x] Tokenizer tests pass — `python tests/test_tokenizer.py` (8/8).
-- [x] RDE tests pass — `python tests/test_rde.py` (15/15).
-- [x] All examples run — `python examples/example_*.py`.
-- [ ] (Optional) `pip install -e ".[dev]" && pytest -q` in a clean venv.
+- [ ] Tokenizer tests pass — `pytest tests/test_tokenizer.py` (8).
+- [ ] RDE tests pass — `pytest tests/test_rde.py` (21).
+- [ ] Model tests pass — `pytest tests/test_model.py` (44, needs torch).
+- [ ] Training tests pass — `pytest tests/test_training.py` (28, needs torch).
+- [ ] Full suite green — `pip install -e ".[dev]" && pytest -q` (**101 total**).
+- [ ] All examples run — `python examples/example_*.py`.
 
 ## 4. Packaging
 
-- [x] `pip install -e .` succeeds (pure standard library, no required deps).
-- [x] Console scripts resolve on PATH: `ryth-tokenizer`, `ryth-rde`.
-- [x] CLI workflow verified: `build → verify → inspect → stats → manifest`.
-- [x] `pyproject.toml` metadata correct (name, version `0.1.0`, license, URLs).
+- [ ] `pip install -e .` succeeds (core is pure standard library, no required deps).
+- [ ] `pip install -e ".[model]"` / `".[train]"` pull in torch and work.
+- [ ] Console scripts resolve on PATH: `ryth-tokenizer`, `ryth-rde`, `ryth-train`.
+- [ ] CLI workflows verified: `build → verify → inspect → stats → manifest`, and
+      `ryth-train --data_dir … --max_steps …` + `--resume latest`.
+- [ ] `pyproject.toml` metadata correct (name, **version**, license, URLs, packages).
 
 ## 5. Documentation
 
-- [x] `README.md` — intro, vision, features, architecture, install, quick start,
-      structure, examples, dataset format, tokenizer, roadmap, license.
-- [x] `docs/` — architecture, tokenizer, dataset_engine, rds_format, quickstart, faq.
-- [x] `CHANGELOG.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-      `SECURITY.md`, `LICENSE` present.
-- [ ] Skim rendered Markdown on GitHub after the first push (links/diagrams).
+- [ ] `README.md` — intro, vision, features (all four pillars), architecture,
+      install, quick start, structure, examples, dataset format, tokenizer, model,
+      training, roadmap, license.
+- [ ] `docs/` — architecture, tokenizer, dataset_engine, rds_format, model,
+      training, quickstart, faq.
+- [ ] `CHANGELOG.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
+      `SECURITY.md`, `LICENSE` present and current.
+- [ ] Skim rendered Markdown on GitHub after the push (links/diagrams).
 
 ## 6. Final review
 
 - [ ] Read the diff / file tree once more.
 - [ ] Confirm author/URLs in `pyproject.toml`, `LICENSE`, and docs are correct.
 
-## 7. Publish (run locally — nothing is pushed for you)
+## 7. Publish
 
-> Authenticate with a **fresh** token via git's credential prompt when pushing.
-> Do not place any token in a file, a command, or a commit.
+> SSH is already configured. Do not place any token in a file, command, or commit.
 
 ```bash
 cd Ryth
-git init
 git add .
-git commit -m "v0.1.0 Foundation Release"
-git branch -M main
-git remote add origin https://github.com/RAJ-af/Ryth.git
-git push -u origin main
+git commit -m "vX.Y.Z <title>"
+git push origin main
 ```
 
 ## 8. Tag the release
 
 ```bash
-git tag -a v0.1.0 -m "Foundation Release: scratch tokenizer + Ryth Data Engine"
-git push origin v0.1.0
+git tag -a vX.Y.Z -m "<title>"
+git push origin vX.Y.Z
 ```
 
-Then on GitHub: **Releases → Draft a new release → choose tag `v0.1.0` →**
-title **"Foundation Release"** → paste the `CHANGELOG.md` v0.1.0 section → Publish.
+Then on GitHub: **Releases → Draft a new release → choose tag `vX.Y.Z` →** set the
+title → paste the matching `CHANGELOG.md` section → Publish.
 
 ## 9. Post-release
 
 - [ ] Verify `pip install git+https://github.com/RAJ-af/Ryth.git` works in a
       clean environment.
-- [ ] Open tracking issues for Phase 3 (Training Engine).
+- [ ] Open tracking issues for the next milestone (currently Phase 5 — 30M prototype).

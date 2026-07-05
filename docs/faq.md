@@ -2,19 +2,25 @@
 
 ### What is Ryth?
 
-An effort to build a **coding-first LLM from scratch**. The Foundation Release
-(v0.1.0) ships two pillars: a scratch byte-level BPE **tokenizer** and the **Ryth
-Data Engine (RDE)**, which turns raw code into training-ready binary shards.
+An effort to build a **coding-first LLM from scratch**. As of **v0.3.0** it ships
+four pillars: a scratch byte-level BPE **tokenizer**, the **Ryth Data Engine
+(RDE)** (raw code → training-ready binary shards), a decoder-only transformer
+**model core**, and a pure-PyTorch **training engine**.
 
 ### Is the model / training engine included?
 
-No. This release is **tokenizer + data engine only**. The training engine and
-model are on the [roadmap](../ROADMAP.md) (Phase 3+).
+Yes. The **model core** landed in v0.2.0 (`model/` package) and the **training
+engine** in v0.3.0 (`training/` package) — both pure PyTorch. The full
+data → tokenizer → model → training path is buildable from source. Next on the
+[roadmap](../ROADMAP.md): actually training the first **30M prototype**
+end-to-end (Phase 5).
 
 ### What are the dependencies?
 
 The tokenizer and RDE core are **pure Python standard library** — no required
-runtime dependencies. `xxhash` (faster dedup) and `pytest` (tests) are optional.
+runtime dependencies. The model core and training engine need **PyTorch**
+(`pip install -e ".[model]"` / `".[train]"`). `xxhash` (faster dedup), `pytest`
+(tests), and `tensorboard` (optional logging) are extras.
 
 ### Which Python versions are supported?
 
@@ -84,6 +90,33 @@ tokenizer's special tokens.
 By a multi-signal complexity score — AST depth, cyclomatic complexity, imports,
 classes, async usage, function count, and size — **not** file size alone. Records
 are ordered easy → medium → hard.
+
+### What is the model architecture?
+
+A **decoder-only transformer** in pure PyTorch: **RoPE** positional embeddings,
+**RMSNorm**, **SwiGLU** feed-forward, and **Grouped-Query Attention** with a
+KV-cache and a FlashAttention (SDPA) path. It's pre-norm with weight tying, and an
+attention **factory** leaves room for future variants (e.g. MLA). Sizes are
+`RythConfig` presets from **30M → 1B**. See [model.md](model.md).
+
+### Do I need a GPU to train?
+
+No — the training engine runs on **CPU and GPU**. CPU is fine for the tiny
+prototypes and the test suite; a GPU (with bf16/fp16) is strongly recommended for
+the 30M+ presets. See [training.md](training.md).
+
+### Can I train my own model, or only the presets?
+
+Either. Pass `model_preset="ryth_30m"` (…`125m`/`350m`/`1b`) to `TrainConfig`, or
+build any `nn.Module` yourself and hand it to `Trainer(config, model=...)` — handy
+for fine-tuning or custom sizes.
+
+### Can I resume an interrupted training run?
+
+Yes. Each run writes `latest.pt` (model + optimizer + step + RNG states + config +
+experiment metadata). Re-run with `--resume latest` (or `resume="latest"`) to pick
+up exactly where it stopped. `keep_last` rotates old checkpoints; `best.pt` and
+`final.pt` are kept too.
 
 ### How do I report a bug or contribute?
 

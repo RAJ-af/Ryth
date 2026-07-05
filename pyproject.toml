@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ryth"
-version = "0.1.0"
-description = "Ryth — a coding-first LLM built from scratch: a scratch byte-level BPE tokenizer and the Ryth Data Engine (RDE)."
+version = "0.3.0"
+description = "Ryth — a coding-first LLM built from scratch: a scratch byte-level BPE tokenizer, the Ryth Data Engine (RDE), a decoder-only transformer model core, and a pure-PyTorch training engine."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

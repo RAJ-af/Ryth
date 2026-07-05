@@ -4,10 +4,11 @@
 
 **A coding-first LLM, built from scratch.**
 
-*Foundation Release (v0.1.0): a scratch byte-level BPE tokenizer + the Ryth Data Engine.*
+*v0.3.0: scratch BPE tokenizer + Ryth Data Engine + transformer model core + pure-PyTorch training engine.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](ROADMAP.md)
 
 </div>
@@ -21,15 +22,22 @@ from scratch** — no black-box frameworks for the core pieces. Every foundation
 component is written in clean, readable Python so it can be understood, audited,
 and extended.
 
-This **Foundation Release (v0.1.0)** ships the first two pillars:
+As of **v0.3.0**, all four foundational pillars are in place — the full
+data → tokenizer → model → training path is buildable from source:
 
 1. **A scratch Byte-Level BPE Tokenizer** — pure Python, no external libraries.
 2. **The Ryth Data Engine (RDE)** — a complete data pipeline that turns raw code
    repositories into a compact, reproducible, memory-mapped binary format (RDS)
    ready for training.
+3. **The Model Core** — a decoder-only transformer (RoPE, RMSNorm, SwiGLU,
+   Grouped-Query Attention, KV-cache) in pure PyTorch, with presets from 30M → 1B.
+4. **The Training Engine** — a pure-PyTorch trainer over RDS datasets: AdamW,
+   warmup+cosine, mixed precision, gradient accumulation/clipping, checkpointing
+   with auto-resume, curriculum learning, and experiment tracking.
 
-> The model and training engine are on the [roadmap](ROADMAP.md) (Phase 3+) and
-> are **not** part of this release.
+> Pillars 1–2 are **pure standard library** (no runtime deps). Pillars 3–4 need
+> PyTorch (`pip install -e ".[model]"` / `".[train]"`). Next on the
+> [roadmap](ROADMAP.md): training the first **30M prototype** end-to-end.
 
 ## Vision
 
@@ -56,6 +64,22 @@ stable across model sizes so only the config changes.
 - **Packing statistics** + auto **validation report** (JSON + HTML)
 - **Pure standard library** — no required runtime dependencies
 
+**Model Core (v0.2.0 — needs PyTorch)**
+- Decoder-only transformer: **RoPE**, **RMSNorm**, **SwiGLU**
+- **Grouped-Query Attention** with KV-cache + FlashAttention (SDPA) path
+- Pluggable **attention factory** (GQA now, MLA reserved), init schemes, feature flags
+- Research **hooks**, parameter/FLOP **metrics**, **checkpoint metadata**
+- Autoregressive **generation** (greedy / temperature / top-k); presets 30M → 1B
+
+**Training Engine (v0.3.0 — needs PyTorch)**
+- **AdamW** (decay/no-decay groups) + **warmup+cosine** schedule
+- **Gradient** accumulation, clipping, and **NaN/Inf detection & skip**
+- **Mixed precision** (bf16/fp16) + **gradient checkpointing**
+- **Checkpoint manager** with **auto-resume**, rotation, `best`/`final`
+- **Curriculum learning** (RDE difficulty), **validation + perplexity**
+- **Experiment tracking** (git commit, tokenizer hash, dataset/model version)
+- JSON + TensorBoard logging; **CPU & GPU**; `ryth-train` CLI
+
 ## Architecture
 
 ```
@@ -76,24 +100,43 @@ stable across model sizes so only the config changes.
                                        │  mmap, random access
                                        ▼
                             RDSDataset (training-ready)
+                                       │
+                                       ▼
+                          ┌──────────────────────────┐
+                          │      Training Engine      │
+                          │  dataloader → loss → grad │
+                          │  AdamW → warmup+cosine    │
+                          │  eval/ppl → checkpoint    │
+                          └────────────┬──────────────┘
+                                       │  trains
+                                       ▼
+                          ┌──────────────────────────┐
+                          │        Model Core         │
+                          │  RoPE · RMSNorm · SwiGLU  │
+                          │  GQA + KV-cache (30M→1B)  │
+                          └──────────────────────────┘
 
    Scratch BPE tokenizer plugs in at the "Encoder" stage.
 ```
 
 ## Installation
 
-Requires **Python 3.9+**. Core install has **no dependencies**.
+Requires **Python 3.9+**. The tokenizer + data engine have **no dependencies**;
+the model core and training engine need **PyTorch**.
 
 ```bash
 git clone https://github.com/RAJ-af/Ryth.git
 cd Ryth
-pip install -e .            # core (pure standard library)
+pip install -e .            # core: tokenizer + RDE (pure standard library)
 # optional extras:
 pip install -e ".[fast]"    # + xxhash (faster dedup)
-pip install -e ".[dev]"     # + pytest (run tests)
+pip install -e ".[model]"   # + torch (model core)
+pip install -e ".[train]"   # + torch (training engine)
+pip install -e ".[dev]"     # + pytest + torch (run the full test suite)
 ```
 
-This installs two command-line tools: **`ryth-tokenizer`** and **`ryth-rde`**.
+This installs three command-line tools: **`ryth-tokenizer`**, **`ryth-rde`**,
+and **`ryth-train`**.
 
 ## Quick Start
 
@@ -112,6 +155,10 @@ ryth-rde build raw_repos rds_out --tokenizer tok/tokenizer.json --seq_len 1024
 ryth-rde verify  rds_out
 ryth-rde inspect rds_out --chunk 0 --decode --tokenizer tok/tokenizer.json
 ryth-rde stats   rds_out
+
+# 5. Train a model on the dataset (needs PyTorch: pip install -e ".[train]")
+ryth-train --data_dir rds_out --model_preset ryth_30m --max_steps 2000 --dtype bf16
+ryth-train --data_dir rds_out --resume latest        # auto-resume
 ```
 
 Full walkthrough: **[docs/quickstart.md](docs/quickstart.md)**.
@@ -134,9 +181,23 @@ Ryth/
 │   ├── rds.py           #   RDS binary reader/writer
 │   ├── sharding.py dataset.py lock.py report.py stats.py
 │   └── cli.py           #   ryth-rde
-├── docs/                # architecture, tokenizer, dataset engine, RDS, quickstart, faq
+├── model/               # decoder-only transformer (needs PyTorch)
+│   ├── config.py        #   RythConfig + presets (30M → 1B)
+│   ├── attention/       #   base · gqa · mla-stub · factory
+│   ├── rope.py rmsnorm.py feedforward.py embedding.py lm_head.py
+│   ├── decoder.py       #   RythDecoder / RythForCausalLM
+│   ├── init.py hooks.py metrics.py checkpoint.py generate.py
+│   └── ...
+├── training/            # Ryth Training Engine (needs PyTorch)
+│   ├── config.py        #   TrainConfig — single source of truth
+│   ├── trainer.py       #   the training loop
+│   ├── optimizer.py scheduler.py loss.py gradient.py precision.py
+│   ├── dataloader.py curriculum.py evaluator.py metrics.py
+│   ├── logger.py checkpoint.py callbacks.py profiler.py benchmark.py
+│   └── cli.py           #   ryth-train
+├── docs/                # architecture, tokenizer, dataset engine, RDS, model, training, quickstart, faq
 ├── examples/            # runnable example scripts
-├── tests/               # pytest suite (pure standard library)
+├── tests/               # pytest suite (core is pure stdlib; model/training need torch)
 ├── scripts/             # convenience shell scripts
 └── configs/             # reference config values
 ```
