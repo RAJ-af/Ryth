@@ -30,6 +30,8 @@ dependencies = []
 fast = ["xxhash>=3.0"]          # faster chunk dedup (optional)
 model = ["torch>=2.1"]          # required for the model core (model/ package)
 train = ["torch>=2.1"]          # training engine (training/ package); + optional tensorboard
+corpus-parquet = ["pyarrow>=12.0"]   # corpus Parquet export (optional)
+corpus-hf = ["datasets>=2.0"]        # corpus Hugging Face sources (optional)
 dev = ["pytest>=7.0", "torch>=2.1"]
 
 [project.urls]
@@ -41,9 +43,15 @@ Issues = "https://github.com/RAJ-af/Ryth/issues"
 ryth-tokenizer = "tokenizer.cli:main"
 ryth-rde = "dataset.cli:main"
 ryth-train = "training.cli:main"
+ryth-corpus = "corpus.cli:main"
 
 [tool.setuptools]
-packages = ["tokenizer", "dataset", "model", "model.attention", "training"]
+packages = [
+    "tokenizer", "dataset", "model", "model.attention", "training",
+    "corpus", "corpus.metadata", "corpus.licenses", "corpus.sources",
+    "corpus.download", "corpus.cleaners", "corpus.filters", "corpus.dedup",
+    "corpus.quality", "corpus.split", "corpus.tasks", "corpus.exporters",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

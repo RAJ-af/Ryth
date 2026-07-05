@@ -3,6 +3,47 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Corpus 1.0] — Ryth Corpus — 2026-07-05
+
+A standalone **corpus engineering system** (`corpus/` package) that turns raw code
+repositories into a world-class, license-clean, deduplicated, quality-scored,
+task-formatted training dataset for 30M → 1B models. Pure standard library core;
+**does not modify** the tokenizer, RDE, model core, or training engine.
+
+### Corpus pipeline (`corpus/` package)
+- **`CorpusConfig`** — one config for languages, task ratios, license policy,
+  quality threshold, dedup thresholds, splits, size caps (configurable ratios).
+- **Sources** (`sources/`) — declarative registry: `github` (public zip via
+  `urllib`, no token), `huggingface` (optional `datasets`), `http` (docs), `local`
+  (offline). Downloaders (`download/`) materialize sources into a uniform staging dir.
+- **Licenses** (`licenses/`) — SPDX detection from LICENSE files + headers;
+  permissive-only policy (MIT/Apache-2.0/BSD/ISC/MPL-2.0/…), GPL/unknown rejected
+  unless explicitly enabled. The source's license hint is re-verified, never trusted.
+- **Cleaning** (`cleaners/`) — removes vendor/build/cache/venv folders, binaries,
+  minified bundles, lock files, generated code, corrupted encodings, oversized
+  files; strips **Jupyter notebook outputs**; detects + **redacts secrets/API keys**.
+- **Filters** (`filters/`) — license/size/language filters + deterministic
+  language-ratio balancing.
+- **Dedup** (`dedup/`) — exact (sha256) + **near-duplicate (MinHash + LSH)**, at
+  file and repository level.
+- **Quality** (`quality/`) — 0–100 repo score from syntax validity, documentation,
+  tests, project structure, comments, complexity, maintainability, duplicate ratio;
+  configurable weights + minimum threshold.
+- **Splits** (`split/`) — deterministic, **leakage-free** repo-level train/val/test.
+- **Metadata** (`metadata/`) — `FileRecord`/`RepoRecord` (+ JSONL store): repository,
+  license, language, path, hash, size, quality score, source, split, timestamp.
+- **Tasks** (`tasks/`) — next-token, FIM, completion, editing, docstring→code,
+  README→code, code→explanation, bug-fixing, refactoring, unit-test generation, with
+  configurable ratios.
+- **Exporters** (`exporters/`) — raw folders, JSONL, Parquet (optional `pyarrow`),
+  and **Ryth RDS via the existing RDE (unchanged)**.
+- **Reports** (`report.py`) — language/license/duplicate/quality/rankings/size/
+  task-distribution, as **HTML + JSON**.
+- **CLI** — `ryth-corpus download | clean | score | build | stats | export`.
+- **Reproducible** — no wall-clock, no RNG; all selection derives from content
+  hashes + `seed`; timestamps passed in by the caller.
+- **33 unit tests** (offline, synthetic repos) covering every module.
+
 ## [0.3.0] — Training Engine — 2026-07-05
 
 Pure-PyTorch training engine for the Ryth model core, over RDS datasets. Modular

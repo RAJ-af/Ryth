@@ -28,14 +28,21 @@ accumulation & clipping, bf16/fp16, gradient checkpointing, NaN detection,
 auto-resume, checkpoint manager, JSON+TensorBoard logging, validation +
 perplexity, early stopping, curriculum learning, and experiment tracking. CPU & GPU.
 
-### Phase 5 — 30M Prototype 🔜 (next)
-Train the first small model end-to-end to validate the full pipeline
-(data → tokenizer → RDE → model → training → generation).
+### Phase 5 — Ryth Corpus ✅ (Corpus v1.0)
+A standalone corpus engineering system (`corpus/` package): permissive-only
+sourcing, cleaning + secret redaction, exact + near-duplicate dedup, quality
+scoring, deterministic leakage-free splits, configurable training-task generation,
+and export to raw/JSONL/Parquet/RDS — reproducible, pure standard library, and
+built without modifying the tokenizer/RDE/model/training engine.
 
-### Phase 6 — 300M ⏳
+### Phase 6 — 30M Prototype 🔜 (next)
+Train the first small model end-to-end on a Ryth Corpus build to validate the full
+pipeline (corpus → tokenizer → RDE → model → training → generation).
+
+### Phase 7 — 300M ⏳
 Scale the model and dataset; refine curriculum and data mixture.
 
-### Phase 7 — 1B ⏳
+### Phase 8 — 1B ⏳
 A larger coding-focused model built on the same foundation.
 
 ## RDE v2 (post first-training-run)

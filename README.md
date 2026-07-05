@@ -195,7 +195,11 @@ Ryth/
 │   ├── dataloader.py curriculum.py evaluator.py metrics.py
 │   ├── logger.py checkpoint.py callbacks.py profiler.py benchmark.py
 │   └── cli.py           #   ryth-train
-├── docs/                # architecture, tokenizer, dataset engine, RDS, model, training, quickstart, faq
+├── corpus/              # Ryth Corpus — dataset engineering system (pure stdlib)
+│   ├── config.py languages.py pipeline.py report.py cli.py  # ryth-corpus
+│   ├── sources/ download/ licenses/ cleaners/ filters/
+│   └── dedup/ quality/ split/ metadata/ tasks/ exporters/
+├── docs/                # architecture, tokenizer, dataset engine, RDS, model, training, corpus, quickstart, faq
 ├── notebooks/           # end-to-end Kaggle training notebook (T4 GPU)
 ├── examples/            # runnable example scripts
 ├── tests/               # pytest suite (core is pure stdlib; model/training need torch)
@@ -287,6 +291,34 @@ in [`notebooks/ryth_kaggle_train.ipynb`](notebooks/ryth_kaggle_train.ipynb)
 [`notebooks/README.md`](notebooks/README.md).
 
 Details: **[docs/training.md](docs/training.md)**.
+
+## Ryth Corpus (v1.0)
+
+A **corpus engineering system** (`corpus/` package) that turns raw code repos into
+a world-class, license-clean, deduplicated, quality-scored, task-formatted training
+dataset for 30M → 1B models. Pure standard library core; **does not modify** the
+tokenizer, RDE, model, or training engine.
+
+- **Sources**: GitHub (zip, no token), Hugging Face (`datasets`), docs/HTTP, local
+  folders — **permissive licenses only** (MIT/Apache/BSD/ISC/MPL-2.0), GPL/unknown
+  rejected by default (license re-verified, never trusted blindly).
+- **Cleaning**: vendor/binary/minified/lockfile/generated/notebook-output removal +
+  **secret/API-key redaction**.
+- **Dedup**: exact (sha256) + near-duplicate (MinHash/LSH), file- and repo-level.
+- **Quality**: 0–100 repo score (syntax, docs, tests, structure, comments,
+  complexity, maintainability, dup ratio) with a configurable threshold.
+- **Splits**: deterministic, **leakage-free** repo-level train/val/test.
+- **Tasks**: next-token, FIM, completion, editing, docstring→code, README→code,
+  code→explanation, bug-fixing, refactoring, unit-test generation (configurable ratios).
+- **Export**: raw folders · JSONL · Parquet · **Ryth RDS (via the existing RDE)**.
+- **Reports**: language/license/dup/quality/rankings/size/task-distribution (HTML+JSON).
+
+```bash
+ryth-corpus build  --input raw_repos --out corpus_out --tasks --min-quality 40
+ryth-corpus export --records corpus_out/records.jsonl --format rds --out rds_out
+```
+
+Details: **[docs/corpus.md](docs/corpus.md)**.
 
 ## CLI Reference
 
@@ -447,8 +479,9 @@ options:
 | 2 | Ryth Data Engine (RDE) | ✅ Done (v0.1.0) |
 | 3 | Model Core (transformer) | ✅ Done (v0.2.0) |
 | 4 | Training Engine | ✅ Done (v0.3.0) |
-| 5 | 30M Prototype | 🔜 Next |
-| 6 | 300M / 1B | ⏳ Planned |
+| 5 | Ryth Corpus (dataset engineering) | ✅ Done (v1.0) |
+| 6 | 30M Prototype | 🔜 Next |
+| 7 | 300M / 1B | ⏳ Planned |
 
 See [ROADMAP.md](ROADMAP.md).
 
