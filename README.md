@@ -284,10 +284,15 @@ ryth-train --data_dir rds_out --model_preset ryth_30m --max_steps 2000 --dtype b
 ryth-train --data_dir rds_out --resume latest      # auto-resume
 ```
 
-**Run the whole stack on Kaggle (free T4 GPU):** an end-to-end notebook —
-corpus → tokenizer → RDS → 30M model → train → checkpoint → resume → generate —
-in [`notebooks/ryth_kaggle_train.ipynb`](notebooks/ryth_kaggle_train.ipynb)
-(or the one-command [`scripts/kaggle_train.py`](scripts/kaggle_train.py)). See
+**Run the whole stack in one notebook (Corpus → Tokenizer → RDS → Model → Train
+→ Eval → Export):** the official entry point is
+[`notebooks/ryth_end_to_end.ipynb`](notebooks/ryth_end_to_end.ipynb) —
+idempotent (`final.pt` present ⇒ training skipped; `latest.pt` resumes),
+GPU-aware (`fp16` on T4, `bf16` on Ampere+), and runs unmodified on Kaggle,
+Colab, or a local box. The leaner
+[`notebooks/ryth_kaggle_train.ipynb`](notebooks/ryth_kaggle_train.ipynb)
+remains for reference; its one-command equivalent is
+[`scripts/kaggle_train.py`](scripts/kaggle_train.py). See
 [`notebooks/README.md`](notebooks/README.md).
 
 Details: **[docs/training.md](docs/training.md)**.

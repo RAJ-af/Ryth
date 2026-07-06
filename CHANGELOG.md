@@ -3,6 +3,31 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — End-to-end notebook (official entry point) — 2026-07-06
+
+The canonical "Run All" notebook for Ryth — one file that takes a raw code
+corpus (or a synthetic fallback) all the way to a trained model + eval +
+artifacts, using only the public library. No core code changes.
+
+- **`notebooks/ryth_end_to_end.ipynb`** — 11 stages: env setup → configuration
+  → corpus → tokenizer → RDS → model → training → evaluation → export →
+  resume state → summary. **Idempotent** (every stage detects existing assets
+  and skips; training auto-resumes from `latest.pt`), **GPU-aware** (`fp16`
+  on T4 Turing, `bf16` on Ampere+; override via `FORCE_DTYPE`).
+- **One configuration cell** — flip `SMOKE = False` for a real run, point
+  `RAW_DIR` / `GITHUB_SOURCES` / `HF_SOURCES` at your data, and choose
+  `MODEL_PRESET = "ryth_30m" | "ryth_125m" | "ryth_350m" | "ryth_1b"`.
+- Runs unmodified on **Kaggle** (T4 / L4 / A100), **Colab**, **local**, or a
+  cluster — only the env-setup cell's `pip install` branch differs.
+- Each run writes a `summary.json` + training curve (`training_curve.png`)
+  alongside the tokenizer, RDS shards, and checkpoints.
+
+### Notes
+- The Kaggle-specific sibling (`ryth_kaggle_train.ipynb`) is kept as a
+  reference; the new notebook supersedes it.
+- Run artifacts (RDS shards, checkpoints, plots) are git-ignored in
+  `notebooks/ryth_run/`.
+
 ## [Corpus 1.0] — Ryth Corpus — 2026-07-05
 
 A standalone **corpus engineering system** (`corpus/` package) that turns raw code

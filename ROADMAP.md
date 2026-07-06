@@ -39,6 +39,10 @@ built without modifying the tokenizer/RDE/model/training engine.
 Train the first small model end-to-end on a Ryth Corpus build to validate the full
 pipeline (corpus → tokenizer → RDE → model → training → generation).
 
+Tooling ready: [`notebooks/ryth_end_to_end.ipynb`](notebooks/ryth_end_to_end.ipynb)
+walks the entire pipeline on Kaggle / Colab / local with a single config cell
+(`SMOKE` toggle + `MODEL_PRESET` for 30M → 1B).
+
 ### Phase 7 — 300M ⏳
 Scale the model and dataset; refine curriculum and data mixture.
 
