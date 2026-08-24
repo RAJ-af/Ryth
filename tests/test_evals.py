@@ -249,3 +249,45 @@ def _id_from_prompt(prompt, problems):           # test helper (sampler DI demo)
         if prompt.startswith(p.prompt.split("\n")[0]):
             return p.task_id
     return ""
+
+
+# --------------------------------------------------------------------- #
+# mbpp — assert-based runner + field adapter
+# --------------------------------------------------------------------- #
+
+from evals.mbpp import evaluate as mbpp_evaluate, load_mbpp
+
+_MBPP = os.path.join(_FIXTURES, "mbpp_tiny.jsonl")
+
+
+def test_load_mbpp_adapter_maps_fields():
+    ps = load_mbpp(_MBPP)
+    assert ps[0].task_id == "m1"
+    assert ps[0].prompt.startswith("Write a function add2")
+    assert ps[0].test == "assert add2(2, 3) == 5\nassert add2(0, 0) == 0"
+
+
+def test_load_mbpp_tolerates_canonical_rows(tmpdir):
+    # already-canonical rows (prompt/test) bhi chale — HumanEval-style file reuse
+    src = os.path.join(str(tmpdir), "canon.jsonl")
+    with open(src, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"task_id": "c1", "prompt": "def g():\n",
+                            "test": "assert g() is not None\n",
+                            "entry_point": "g"}) + "\n")
+    ps = load_mbpp(src)
+    assert ps[0].task_id == "c1" and ps[0].entry_point == "g"
+
+
+def test_mbpp_perfect_sampler_scores_100():
+    problems = load_mbpp(_MBPP)
+    canon = {p.task_id: p.canonical_solution for p in problems}
+    res = mbpp_evaluate(problems, sampler=lambda prompt: canon.get(
+        _mbpp_id(prompt, problems), ""), n_samples=2, ks=(1,))
+    assert abs(res["pass_at_k"]["pass@1"] - 1.0) < 1e-9
+
+
+def _mbpp_id(prompt, problems):
+    for p in problems:
+        if prompt.startswith(p.prompt.split(".")[0][:20]):
+            return p.task_id
+    return ""
