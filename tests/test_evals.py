@@ -96,3 +96,42 @@ def test_run_program_pass_fail_timeout_syntax():
     assert not r.ok and r.timed_out
     r = run_program("def broken(:\n")
     assert not r.ok and not r.timed_out          # SyntaxError = non-zero exit
+
+
+# --------------------------------------------------------------------- #
+# datasets — problem loader + fixtures
+# --------------------------------------------------------------------- #
+
+import gzip
+
+from evals.datasets import Problem, load_problems
+
+_FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+def test_load_problems_jsonl():
+    ps = load_problems(os.path.join(_FIXTURES, "humaneval_tiny.jsonl"))
+    assert [p.task_id for p in ps] == ["tiny/1", "tiny/2"]
+    p = ps[0]
+    assert isinstance(p, Problem)
+    assert p.entry_point == "add_two"
+    assert "candidate" in p.test and p.prompt.startswith("def ")
+
+
+def test_load_problems_gz(tmpdir):
+    src = os.path.join(_FIXTURES, "humaneval_tiny.jsonl")
+    gz = os.path.join(str(tmpdir), "p.jsonl.gz")
+    with open(src, "rb") as fin, gzip.open(gz, "wb") as fout:
+        fout.write(fin.read())
+    assert len(load_problems(gz)) == 2
+
+
+def test_load_problems_missing_key_raises(tmpdir):
+    bad = os.path.join(str(tmpdir), "bad.jsonl")
+    with open(bad, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"task_id": "x"}) + "\n")
+    try:
+        load_problems(bad)
+        assert False, "expected ValueError"
+    except ValueError as e:
+        assert "prompt" in str(e)
