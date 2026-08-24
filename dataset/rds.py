@@ -123,10 +123,27 @@ class RDSReader:
 
     def __init__(self, path: str):
         self.path = path
-        self._fd = open(path, "rb")
-        self._mm = mmap.mmap(self._fd.fileno(), 0, access=mmap.ACCESS_READ)
+        self._reopen()
         self._parse_header()
         self._load_index()
+
+    def _reopen(self):
+        self._fd = open(self.path, "rb")
+        self._mm = mmap.mmap(self._fd.fileno(), 0, access=mmap.ACCESS_READ)
+
+    # Pickle-safety: multiprocessing 'forkserver'/'spawn' (Python 3.14+ ka
+    # default) workers ko dataset pickle karke deta hai — khula fd/mmap
+    # serialize nahi hota. State me sirf metadata jaata hai; worker pehli
+    # access par file lazily dobara khol lega.
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("_fd", None)
+        state.pop("_mm", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._reopen()
 
     def _parse_header(self):
         # magic ke baad version padho, phir us version ka parser chuno.

@@ -29,6 +29,7 @@ tokenizer_out/
 tokenizer_custom/
 data/
 raw_repos/
+ryth_work/
 checkpoints/
 *.bin
 manifest.json
@@ -54,7 +55,13 @@ Thumbs.db
 *.key
 .env
 .env.*
-secrets.*
+# NOTE: sirf credential-files ignore karo — 'secrets.*' likhne par source
+# modules (corpus/cleaners/secrets.py) bhi git me add nahi hote the!
+secrets.txt
+secrets.json
+secrets.yaml
+secrets.yml
+secrets.local.*
 
 # Model checkpoints
 *.pt

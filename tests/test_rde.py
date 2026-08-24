@@ -7,6 +7,7 @@ Pure stdlib — koi torch/numpy nahi. Run:
 
 import os
 import sys
+import pickle
 import tempfile
 import shutil
 
@@ -125,6 +126,25 @@ def test_pipeline_end_to_end_and_random_access():
         assert len(chunk) == manifest["seq_len"]
         m = ds.meta(idx)
         assert "repo" in m and "difficulty" in m
+        ds.close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_dataset_pickle_roundtrip_for_dataloader_workers():
+    """Python 3.14+ me multiprocessing ka default start-method 'forkserver' hai,
+    jo DataLoader workers ko dataset pickle karke deta hai. Khule file handles
+    (mmap/fd) serialize nahi hote — reader ko lazy-reopen se pickle-safe hona
+    chahiye."""
+    tmp = tempfile.mkdtemp()
+    try:
+        _, out, _, _, _ = _run_pipeline(tmp)
+        ds = RDSDataset(out)
+        chunk_before = bytes(ds[0])
+        clone = pickle.loads(pickle.dumps(ds))     # worker jaisa roundtrip
+        assert len(clone) == len(ds)
+        assert bytes(clone[0]) == chunk_before     # data intact after reopen
+        assert clone.verify() is True
         ds.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
