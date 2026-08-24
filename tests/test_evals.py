@@ -135,3 +135,64 @@ def test_load_problems_missing_key_raises(tmpdir):
         assert False, "expected ValueError"
     except ValueError as e:
         assert "prompt" in str(e)
+
+
+# --------------------------------------------------------------------- #
+# generation — ckpt loading + sampling (torch)
+# --------------------------------------------------------------------- #
+
+import torch
+
+from model import RythConfig, RythForCausalLM
+from model.checkpoint import save_checkpoint
+from evals.generation import (extract_code, find_eos, load_model,
+                              sample_completion, truncate_at_stops)
+
+
+def test_truncate_at_stops():
+    assert truncate_at_stops("abc```more", ("```",)) == "abc"
+    assert truncate_at_stops("no stops", ("```",)) == "no stops"
+    assert truncate_at_stops("a\nb\nclass X", ("\nclass", "\ndef")) == "a\nb"
+
+
+def test_extract_code_strips_fences():
+    assert extract_code("```python\nprint(1)\n```") == "print(1)"
+    assert extract_code("plain code") == "plain code"
+
+
+def test_extract_code_preserves_indent_without_fences():
+    # function-body continuation ka leading indent KEEMTI hai (ruling)
+    assert extract_code("    return a + b\n") == "    return a + b"
+
+
+def test_sample_completion_with_real_tiny_model():
+    # NOTE: preset classmethods apne defaults override nahi karne dete (config.py:104),
+    # isliye chhota model seedha RythConfig(...) se banta hai.
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=64,
+                     d_model=64, n_layers=2, n_heads=4, n_kv_heads=2)
+    model = RythForCausalLM(cfg)
+    out = sample_completion(model, tok, "def f():\n",
+                            max_new_tokens=8, temperature=1.0)
+    assert isinstance(out, str)
+
+
+def test_find_eos_none_by_default():
+    assert find_eos(_tok()) is None
+    tok = _tok()
+    tok.add_special_tokens(["<|end|>"])
+    assert find_eos(tok) == tok.special_tokens["<|end|>"]
+
+
+def test_load_model_from_checkpoint(tmpdir):
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=32,
+                     d_model=64, n_layers=2, n_heads=4, n_kv_heads=2)
+    model = RythForCausalLM(cfg)
+    ck = os.path.join(str(tmpdir), "best.pt")
+    save_checkpoint(ck, model, cfg)
+    loaded = load_model(ck, tok.vocab_size, preset=None, seq_len=32)
+    assert loaded.config.vocab_size == tok.vocab_size   # attr = .config
+    x = torch.randint(0, tok.vocab_size, (1, 4))
+    logits, _ = loaded(x)
+    assert logits.shape[-1] == tok.vocab_size
