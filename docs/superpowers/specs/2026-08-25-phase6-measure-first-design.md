@@ -37,6 +37,8 @@ pillars (tokenizer / RDE / model / training engine).
 | Data sources | **Multi-source**: HF code datasets (license-filtered) + curated GitHub repos, all through ryth-corpus cleaning/dedup | "Har jagah se high-quality" — no single point of failure |
 | Program shape | **Measure-first**: W1 pretrain ∥ W2 evals ∥ W3 SFT-data | Quality matters ⇒ measurement exists before scale-up |
 | Compute | Kaggle only (owner is on Termux/proot; no local GPU) | T4 fp16, resume across sessions |
+| Product shape | **Specialist Army**: shared Ryth-Base → branched specialists (Web / Droid / Py ...), not one Opus-class generalist | Narrow scope ⇒ high competence per parameter; each runs on low-spec hardware |
+| Context | **≥ 32k target** via staged extension (train @2–4k, extend @32k with RoPE theta scaling, ~+15% time) | GQA keeps KV-cache small (350M@32k ≈ 1.6GB — phone-feasible); full utilisation realistically from 350M+ |
 | Experiments | Dedicated track after each milestone; first candidate = kNN-Memory Head | Owner's core motive is learning/experimenting |
 
 ## 3. Verification baseline (2026-08-25 audit)
@@ -123,7 +125,38 @@ tokens, ready for the future SFT trainer.
 **Acceptance:** v1 dataset of ~5–10k examples where ≥ 90% pass rule filters;
 spot-check sample reviewed by owner.
 
-## 7. Experiment Track (research budget)
+## 7. Specialist Army & Knowledge System (post-M3 roadmap)
+
+The long-term product is **not one Opus-class model** — it is a fleet of small
+specialists, each genuinely useful on low-spec hardware:
+
+```
+                     ┌─► Ryth-Web    (HTML/CSS/JS/React)   ~150M
+Ryth-Base (~350M+) ──┼─► Ryth-Droid  (Kotlin/Java/Android) ~150M
+    (shared base)    └─► Ryth-Py      (Python/data/scripts) ~150M
+```
+
+**Shared base → branch.** Specialists are NOT trained from scratch: the shared
+base learns general coding once; each specialist adds a cheap continued-training
+phase (~hours, not days) on stack-specific data.
+
+**Knowledge System (owner's "data center" idea = RAG + tool use).** Each
+specialist gets a curated knowledge base (official docs, tutorials, changelogs
+for its stacks):
+
+- **Training time:** core skills are baked into weights from the KB's stable
+  content — no context-window cost at inference.
+- **Run time:** new framework versions → update the KB index only; the agent
+  retrieves just the relevant ~0.5–2k-token chunks on demand (RAG). No
+  retraining needed for "latest tech" — this is deliberate.
+- **Tools:** things like git are *executed by the agent harness*, not memorised.
+- **Routing:** v1 = user picks the specialist manually; a tiny classifier-router
+  is a later option.
+- **Context strategy:** staged extension to ≥32k (train @2–4k → extend @32k,
+  RoPE theta scaling); retrieval keeps prompts small regardless — big context
+  is headroom for agentic workflows, not an excuse to stuff documents.
+
+## 8. Experiment Track (research budget)
 
 One bounded experiment per milestone gap; results recorded in
 `docs/experiments/<name>.md`. First candidate:
@@ -140,7 +173,7 @@ feasible at 30M scale.
 Backlog (post-M3): reservoir-style fixed-random projection layer;
 curriculum ablation (C-first vs mixed); FIM-rate sweep.
 
-## 8. Agent fleet usage
+## 9. Agent fleet usage
 
 Owner's Claude Code proxy exposes multiple backends. Working split:
 main loop = architecture + core implementation + review integration;
@@ -149,7 +182,7 @@ implementation, SFT scaffolding, code-review passes) dispatched per
 superpowers subagent-driven development. All heavy GPU runs stay manual
 (owner triggers Kaggle notebooks/scripts prepared by the agents).
 
-## 9. Milestones
+## 10. Milestones
 
 | # | Scope | Acceptance proof |
 |---|---|---|
@@ -159,7 +192,7 @@ superpowers subagent-driven development. All heavy GPU runs stay manual
 | M3 | SFT dataset v1 (5–10k filtered examples) + kNN-memory experiment write-up | filter-pass rate ≥ 90%; experiment doc |
 | M3+ | SFT trainer integration; ladder to 125M/350M | separate spec |
 
-## 10. Risks & mitigations
+## 11. Risks & mitigations
 
 | Risk | Mitigation |
 |---|---|
@@ -169,7 +202,7 @@ superpowers subagent-driven development. All heavy GPU runs stay manual
 | Teacher API unavailable/expensive | Rule-filter-only mode degrades gracefully; cache raw responses |
 | Small-model expectations mismatch | Milestone acceptance criteria stated explicitly (§4/§9); capability ladder documented in README later |
 
-## 11. Testing strategy
+## 12. Testing strategy
 
 - New packages follow repo convention: pytest suites, pure-stdlib parts where
   possible, deterministic seeds.
