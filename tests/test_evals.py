@@ -78,3 +78,21 @@ def test_aggregate_mean_over_tasks():
     out = aggregate(res, ks=(1, 2))
     assert abs(out["pass@1"] - 0.75) < 1e-9       # (1.0 + 0.5)/2
     assert out["pass@2"] >= out["pass@1"]
+
+
+# --------------------------------------------------------------------- #
+# execution — sandboxed subprocess runner
+# --------------------------------------------------------------------- #
+
+from evals.execution import run_program
+
+
+def test_run_program_pass_fail_timeout_syntax():
+    r = run_program("print('PASS')\n")
+    assert r.ok and r.stdout.strip() == "PASS" and not r.timed_out
+    r = run_program("raise AssertionError('boom')\n")
+    assert not r.ok and "AssertionError" in r.stderr
+    r = run_program("while True:\n    pass\n", timeout_s=1.0)
+    assert not r.ok and r.timed_out
+    r = run_program("def broken(:\n")
+    assert not r.ok and not r.timed_out          # SyntaxError = non-zero exit
