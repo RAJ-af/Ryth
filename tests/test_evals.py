@@ -196,3 +196,56 @@ def test_load_model_from_checkpoint(tmpdir):
     x = torch.randint(0, tok.vocab_size, (1, 4))
     logits, _ = loaded(x)
     assert logits.shape[-1] == tok.vocab_size
+
+
+# --------------------------------------------------------------------- #
+# humaneval — pass@k runner
+# --------------------------------------------------------------------- #
+
+from evals.humaneval import evaluate, save_results
+
+_HE = os.path.join(_FIXTURES, "humaneval_tiny.jsonl")
+
+
+def test_humaneval_perfect_sampler_scores_100():
+    problems = load_problems(_HE)
+    canon = {p.task_id: p.canonical_solution for p in problems}
+    res = evaluate(problems, sampler=lambda prompt: canon.get(
+        _id_from_prompt(prompt, problems), ""), n_samples=3, ks=(1,))
+    assert abs(res["pass_at_k"]["pass@1"] - 1.0) < 1e-9
+
+
+def test_humaneval_empty_sampler_scores_0():
+    problems = load_problems(_HE)
+    res = evaluate(problems, sampler=lambda prompt: "", n_samples=2, ks=(1,))
+    assert res["pass_at_k"]["pass@1"] == 0.0
+
+
+def test_humaneval_results_file_written(tmpdir):
+    problems = load_problems(_HE)[:1]
+    canon = problems[0].canonical_solution
+    res = evaluate(problems, sampler=lambda prompt: canon, n_samples=2, ks=(1,))
+    out = os.path.join(str(tmpdir), "res.json")
+    save_results(res, out)
+    with open(out, encoding="utf-8") as f:
+        back = json.load(f)
+    assert back["tasks"][0]["n_passed"] == 2
+
+
+def test_humaneval_meta_echoes_config():
+    # global constraint: results me config echo hota hai
+    problems = load_problems(_HE)
+    res = evaluate(problems, sampler=lambda prompt: "", n_samples=1,
+                   ks=(1,), temperature=0.5, top_k=10, max_new_tokens=32,
+                   progress=lambda *a, **k: None)
+    m = res["meta"]
+    assert (m["task"], m["mode"], m["n_samples"], m["temperature"],
+            m["top_k"], m["max_new_tokens"]) == ("humaneval", "base",
+                                                 1, 0.5, 10, 32)
+
+
+def _id_from_prompt(prompt, problems):           # test helper (sampler DI demo)
+    for p in problems:
+        if prompt.startswith(p.prompt.split("\n")[0]):
+            return p.task_id
+    return ""
