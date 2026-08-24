@@ -291,3 +291,42 @@ def _mbpp_id(prompt, problems):
         if prompt.startswith(p.prompt.split(".")[0][:20]):
             return p.task_id
     return ""
+
+
+# --------------------------------------------------------------------- #
+# ppl — held-out perplexity
+# --------------------------------------------------------------------- #
+
+from evals.ppl import evaluate_files, perplexity
+
+
+def test_perplexity_finite_deterministic_and_reasonable():
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=128,
+                     d_model=64, n_layers=2, n_heads=4, n_kv_heads=2)
+    torch.manual_seed(0)
+    model = RythForCausalLM(cfg)
+    text = ("def add(a, b):\n    return a + b\n" * 20)
+    p1 = perplexity(model, tok, text, seq_len=64)
+    p2 = perplexity(model, tok, text, seq_len=64)
+    assert p1 == p2 and p1 > 1.0                    # random init => high ppl
+
+
+def test_perplexity_short_text_is_inf():
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=16,
+                     d_model=32, n_layers=1, n_heads=2, n_kv_heads=1)
+    model = RythForCausalLM(cfg)
+    assert perplexity(model, tok, "", seq_len=8) == float("inf")
+
+
+def test_evaluate_files_reads_labels(tmpdir):
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=16,
+                     d_model=32, n_layers=1, n_heads=2, n_kv_heads=1)
+    model = RythForCausalLM(cfg)
+    f = os.path.join(str(tmpdir), "py.txt")
+    with open(f, "w", encoding="utf-8") as fh:
+        fh.write("return 1\n" * 5)
+    out = evaluate_files(model, tok, {"py": f}, seq_len=8)
+    assert set(out) == {"py"} and isinstance(out["py"], float)
