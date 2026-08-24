@@ -54,3 +54,27 @@ def test_extract_assistant_cuts_at_end():
     # bina <|end|> ke poora tail milta hai
     assert extract_assistant("x<|assistant|>abc") == "abc"
     assert extract_assistant("no markers here") == ""
+
+
+# --------------------------------------------------------------------- #
+# metrics — pass@k
+# --------------------------------------------------------------------- #
+
+from evals.metrics import aggregate, pass_at_k
+
+
+def test_pass_at_k_known_values():
+    assert pass_at_k(100, 100, 1) == 1.0          # sab correct
+    assert pass_at_k(100, 0, 1) == 0.0            # kuch correct nahi
+    assert abs(pass_at_k(4, 1, 1) - 0.25) < 1e-9   # c/n
+    assert abs(pass_at_k(10, 5, 1) - 0.5) < 1e-9   # simple: 1-(n-c)/n
+    # monotone: zyada k => zyada ya barabar chance
+    assert pass_at_k(20, 5, 5) >= pass_at_k(20, 5, 1)
+
+
+def test_aggregate_mean_over_tasks():
+    res = [{"task_id": "a", "n": 10, "n_passed": 10},
+           {"task_id": "b", "n": 10, "n_passed": 5}]
+    out = aggregate(res, ks=(1, 2))
+    assert abs(out["pass@1"] - 0.75) < 1e-9       # (1.0 + 0.5)/2
+    assert out["pass@2"] >= out["pass@1"]
