@@ -6,7 +6,12 @@
     "temperature": 0.8,
     "top_k": 40,
     "max_new_tokens": 32,
-    "seed": 1234
+    "seed": 1234,
+    "tokenizer": "near-byte-260",
+    "model_init_seed": 1234,
+    "checkpoint": "random-init",
+    "seq_len": 256,
+    "limit": 40
   },
   "tasks": [
     {

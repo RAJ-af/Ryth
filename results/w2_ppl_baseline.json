@@ -1,6 +1,12 @@
 {
   "meta": {
-    "task": "ppl"
+    "task": "ppl",
+    "val_python_chars": 104214,
+    "tokenizer": "near-byte-260",
+    "model_init_seed": 1234,
+    "checkpoint": "random-init",
+    "seq_len": 256,
+    "limit": 40
   },
   "perplexity": {
     "python": 212.51115997452015
