@@ -14,6 +14,14 @@ from __future__ import annotations
 import json
 import os
 
+# --- make the repo importable when run from a clone (scripts/..) ------------
+import sys
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.dirname(_HERE)
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
+
 
 ALLOWED_LICENSES = {"mit", "apache-2.0", "bsd-3-clause", "bsd-2-clause",
                     "isc", "mpl-2.0"}

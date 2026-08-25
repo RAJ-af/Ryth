@@ -15,6 +15,14 @@ import json
 import os
 import shutil
 
+# --- make the repo importable when run from a clone (scripts/..) ------------
+import sys
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.dirname(_HERE)
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
+
 
 DEFAULT_TOTAL_BYTES = 2_400_000_000          # ~2.4 GB text ≈ 600M+ code tokens
 

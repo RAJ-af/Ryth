@@ -14,6 +14,14 @@ import json
 import os
 import shutil
 
+# --- make the repo importable when run from a clone (scripts/..) ------------
+import sys
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.dirname(_HERE)
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
+
 
 # ye keys pehle valid part manifest se copy hoti hain (RDSDataset inhe padhta hai)
 _PROPAGATE_KEYS = ("format", "rds_version", "tokenizer_version",

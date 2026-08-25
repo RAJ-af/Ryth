@@ -547,3 +547,84 @@ def test_downloader_default_has_no_silent_example_cap(tmp_path):
     dl = HuggingFaceDownloader(max_bytes=None)
     staged = dl.fetch(src, str(tmp_path))
     assert len(os.listdir(staged.root)) == 7000            # sab staged
+
+
+# ------------------------------------------------------------------- #
+# fresh-clone script invocation — python3 scripts/*.py ko repo-root na mile
+# to `corpus`/`tokenizer`/`dataset` packages import nahi ho sakte the
+# (Kaggle A1 probe fail: ModuleNotFoundError 'corpus'; kaggle_train.py me
+# pehle se bootstrap tha, baaki chaar me nahi)
+# ------------------------------------------------------------------- #
+
+_SCRIPTS_NEEDING_BOOTSTRAP = ("w1_probe_stack", "w1_build_corpus",
+                              "w1_pack_rds", "w1_train_tokenizer")
+
+
+def test_entry_scripts_bootstrap_repo_root():
+    # har W1 entry-script apne __file__ se repo-root sys.path me rakhe —
+    # machine-specific path hack nahi, clone-relative discovery
+    base = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "scripts")
+    for name in _SCRIPTS_NEEDING_BOOTSTRAP:
+        src = open(os.path.join(base, name + ".py"), encoding="utf-8").read()
+        assert "_REPO not in sys.path" in src, f"{name}: bootstrap missing"
+
+
+def test_probe_runs_as_fresh_clone_subprocess(tmp_path):
+    # EXACT Kaggle invocation simulate: `python3 <clone>/scripts/w1_probe_stack.py`
+    # -S = site/editable-hooks OFF (dev-machine par installed ryth bug chhupa
+    # deta tha), PYTHONPATH khali, cwd bahaar. Provenance sentinel prove karta
+    # hai ki `corpus` CLONE se aaya, installed package se nahi.
+    import shutil
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # minimal FRESH CLONE: sirf probe script + corpus tree + sentinel
+    clone = tmp_path / "ryth"
+    (clone / "scripts").mkdir(parents=True)
+    shutil.copy(os.path.join(repo, "scripts", "w1_probe_stack.py"),
+                clone / "scripts" / "w1_probe_stack.py")
+    shutil.copytree(os.path.join(repo, "corpus"), clone / "corpus",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    sentinel = tmp_path / "sentinel.txt"
+    init = clone / "corpus" / "__init__.py"
+    orig_init = init.read_text(encoding="utf-8")
+    init.write_text(orig_init +
+                    f"\nopen({str(sentinel)!r}, 'a').write('clone-import\\n')\n",
+                    encoding="utf-8")
+
+    cfg = tmp_path / "src.json"
+    cfg.write_text(json.dumps([
+        {"id": "hf:x", "kind": "huggingface",
+         "location": "codeparrot/github-code", "languages": ["c"],
+         "category": "code", "subpath": "C-all"}]), encoding="utf-8")
+
+    # fake datasets bhi CLONE ke andar hi rakho (-S ke baad sirf clone paths)
+    ds_dir = clone / "datasets"
+    ds_dir.mkdir()
+    (ds_dir / "__init__.py").write_text(
+        "class _DS:\n"
+        "    def __iter__(self):\n"
+        "        return iter([{'code': 'x=1', 'license': 'mit'},\n"
+        "                     {'code': 'y=2'}])\n"
+        "def load_dataset(*a, **k):\n"
+        "    return _DS()\n", encoding="utf-8")
+
+    probe = str(clone / "scripts" / "w1_probe_stack.py")
+    child_code = (
+        "import runpy, sys\n"
+        f"sys.argv = [{probe!r}, '--subset', 'c', '--limit', '2', "
+        f"'--config', {str(cfg)!r}]\n"
+        f"runpy.run_path({probe!r}, run_name='__main__')\n")
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    r = subprocess.run([sys.executable, "-S", "-c", child_code],
+                       cwd=str(tmp_path), env=env, capture_output=True,
+                       text=True, timeout=120)
+    assert r.returncode == 0, \
+        f"rc={r.returncode}\nSTDERR:\n{r.stderr[-800:]}"
+    out = json.loads(r.stdout[r.stdout.index("{"):])
+    assert out["rows"] == 2 and out["columns"] == ["code", "license"]
+    assert sentinel.exists() and "clone-import" in sentinel.read_text(), \
+        "`corpus` clone se resolve NAHI hua (installed/package-hook jeet gaya)"
