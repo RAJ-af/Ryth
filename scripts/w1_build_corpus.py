@@ -51,7 +51,7 @@ def _stage_download(entry: dict, budget: int, stage_root: str,
                     local_input: str | None) -> dict:
     from corpus.sources.registry import Source
 
-    src = Source(**entry)
+    src = Source.from_dict(entry)                  # extra keys tolerate
     stage_dir = os.path.join(stage_root,
                              src.id.replace(":", "_").replace("/", "_"))
     os.makedirs(stage_dir, exist_ok=True)
@@ -63,7 +63,8 @@ def _stage_download(entry: dict, budget: int, stage_root: str,
         from corpus.download.huggingface import HuggingFaceDownloader
 
         dl = HuggingFaceDownloader(max_bytes=budget)
-        staged = dl.fetch(src, stage_root)
+        staged = dl.fetch(src, stage_root,
+                          fallbacks=entry.get("fallbacks"))
         root = staged.root
     elif src.kind == "local":
         if not local_input:

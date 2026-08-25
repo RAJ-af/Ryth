@@ -64,13 +64,19 @@ compute Kaggle par; ye doc exact click-path deta hai.
 
 ## Troubleshooting
 
-- **`load_dataset` script-dataset reject ho** (`Dataset scripts are no longer
-  supported` — newer `datasets` versions): The Stack-dedup legacy loading-script
-  format hai. Fallback: parquet mirror —
-  `load_dataset("bigcode/the-stack-dedup", revision="refs/convert/parquet", data_dir="data/python", streaming=True)`
-  ya `bigcode/starcoderdata` (native parquet, `content`+`license` columns,
-  streaming works). Probe (§1 step 4) pehle hi ye bata degi. Downloader me
-  location/revision change config-level fix hai.
+- **GATED dataset error** (`401 authentication` / `accept gate at the hub`):
+  `bigcode/the-stack-dedup` AUR `bigcode/starcoderdata` dono `gated: auto`
+  hain — bina HF token nahi khulenge. Isi liye primary source ab
+  **`codeparrot/github-code` @ `refs/convert/parquet`** hai (UNGATED;
+  2026-08-25 ko anonymous streaming VERIFY kiya: Python-all/C-all dirs,
+  columns `code/language/license/path/repo_name/size`). Probe + downloader
+  dono isi config se chalte hain; agar kabhi primary gate ho jaye to config
+  entry me `"fallbacks": [{"location": ..., "subpath": ..., "revision": ...}]`
+  dal do — downloader khud agla source try karega.
+- **`load_dataset` script-dataset reject** (`Dataset scripts are no longer
+  supported`): github-code legacy script-format hai, isliye hum `ref:
+  refs/convert/parquet` (auto-converted parquet branch) use karte hain —
+  naye `datasets` versions ke saath compatible.
 - **Session beech me mari**: wahi section dobara Run karo — `_DONE` markers +
   `latest.pt` resume sab handle karte hain (same `/kaggle/working` path).
 - **fp16 NaN loss T4 par**: `--grad_ckpt` ke saath fp32 fallback karo

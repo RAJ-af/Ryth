@@ -1,10 +1,12 @@
 [
-  {"id": "hf:stack-py", "kind": "huggingface",
-   "location": "bigcode/the-stack-dedup", "languages": ["python"],
-   "category": "code", "subpath": "data/python",
+  {"id": "hf:ghcode-py", "kind": "huggingface",
+   "location": "codeparrot/github-code", "languages": ["python"],
+   "category": "code", "subpath": "Python-all",
+   "ref": "refs/convert/parquet",
    "license_hint": "MIT/Apache/BSD/ISC/MPL-2.0-or-unknown"},
-  {"id": "hf:stack-c", "kind": "huggingface",
-   "location": "bigcode/the-stack-dedup", "languages": ["c"],
-   "category": "code", "subpath": "data/c",
+  {"id": "hf:ghcode-c", "kind": "huggingface",
+   "location": "codeparrot/github-code", "languages": ["c"],
+   "category": "code", "subpath": "C-all",
+   "ref": "refs/convert/parquet",
    "license_hint": "MIT/Apache/BSD/ISC/MPL-2.0-or-unknown"}
 ]

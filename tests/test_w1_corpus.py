@@ -29,12 +29,32 @@ def _install_fake_datasets(monkeypatch_rows):
     """sys.modules me nakli `datasets` bhejo jiska load_dataset rows deta hai."""
     calls = {}
 
-    def fake_load(name, split=None, streaming=None, data_dir=None):
+    def fake_load(name, split=None, streaming=None, data_dir=None,
+                  revision=None):
         calls["name"] = name
         calls["split"] = split
         calls["streaming"] = streaming
         calls["data_dir"] = data_dir
+        calls["revision"] = revision
         return _FakeDS(monkeypatch_rows)
+
+    mod = types.ModuleType("datasets")
+    mod.load_dataset = fake_load
+    sys.modules["datasets"] = mod
+    return calls
+
+
+def _install_gated_fake_datasets(gated_name):
+    """Primary GATED behave kare (401/auth error), baaki sources rows dein."""
+    calls = []
+
+    def fake_load(name, split=None, streaming=None, data_dir=None,
+                  revision=None):
+        calls.append((name, data_dir, revision))
+        if name == gated_name:
+            raise RuntimeError(f"{gated_name} is gated: 401 authentication "
+                               "required — accept gate at the hub")
+        return _FakeDS([{"code": "int main(){return 0;}", "license": "isc"}])
 
     mod = types.ModuleType("datasets")
     mod.load_dataset = fake_load
@@ -116,8 +136,11 @@ def test_w1_sources_json_valid_against_registry():
         s = Source(**e)                                    # schema validate ho gaya
         assert s.enabled and s.kind in ("huggingface", "github")
         ids.add(s.id)
-    assert any(e["subpath"] == "data/python" for e in entries)
-    assert any(e["subpath"] == "data/c" for e in entries)
+    # ungated primary (stack-dedup/starcoderdata dono gated=auto hain):
+    # codeparrot/github-code parquet-mirror, per-language dirs + revision
+    assert all(e["location"] == "codeparrot/github-code" for e in entries)
+    assert {e["subpath"] for e in entries} == {"Python-all", "C-all"}
+    assert all(e.get("ref") == "refs/convert/parquet" for e in entries)
     assert len(ids) == len(entries)                        # unique ids
 
 
@@ -428,3 +451,99 @@ def test_kaggle_train_smoke_overrides_eff_tokens():
     kt.apply_smoke(ns)
     assert ns.micro_batch == 8 and ns.grad_accum == 2 and ns.seq_len == 128
     assert ns.eff_tokens == 8 * 2 * 128                    # 2048, stale 262144 NAHI
+
+
+# ------------------------------------------------------------------- #
+# gated-source / fallback — Kaggle par bina HF_TOKEN ke chale (2026-08-25)
+# bigcode/the-stack-dedup AUR starcoderdata dono gated=auto hain; ungated
+# verified alternative: codeparrot/github-code @ refs/convert/parquet
+# (columns: code/language/license/path/repo_name/size).
+# ------------------------------------------------------------------- #
+
+def test_hf_downloader_falls_back_when_primary_gated(tmp_path):
+    from corpus.download.huggingface import HuggingFaceDownloader
+    from corpus.sources.registry import Source
+
+    calls = _install_gated_fake_datasets("bigcode/the-stack-dedup")
+    src = Source(id="hf:stack-c", kind="huggingface",
+                 location="bigcode/the-stack-dedup", languages=("c",),
+                 subpath="data/c")
+    dl = HuggingFaceDownloader()
+    staged = dl.fetch(src, str(tmp_path),
+                      fallbacks=[{"location": "codeparrot/github-code",
+                                  "subpath": "C-all",
+                                  "revision": "refs/convert/parquet"}])
+    assert len(os.listdir(staged.root)) == 1               # fallback se aaya
+    assert calls[0][0] == "bigcode/the-stack-dedup"        # pehle primary try
+    assert calls[-1] == ("codeparrot/github-code", "C-all",
+                         "refs/convert/parquet")           # phir fallback
+    # revision sirf fallback me tha; primary ka None hi jaata hai
+    assert calls[0][2] is None
+
+
+def test_hf_gated_without_fallback_is_actionable_error(tmp_path):
+    import pytest
+
+    from corpus.download.huggingface import DownloadError, HuggingFaceDownloader
+    from corpus.sources.registry import Source
+
+    _install_gated_fake_datasets("bigcode/the-stack-dedup")
+    src = Source(id="hf:stack-py", kind="huggingface",
+                 location="bigcode/the-stack-dedup", languages=("python",))
+    dl = HuggingFaceDownloader()
+    with pytest.raises(DownloadError, match="gated|HF_TOKEN|fallback"):
+        dl.fetch(src, str(tmp_path))
+
+
+def test_probe_streams_configured_source_not_hardcoded(tmp_path):
+    # probe ab configs/w1_sources.json se source uthata hai — hardcoded
+    # stack-dedup kabhi nahi (gated tha); ref -> revision mapping yahan
+    from w1_probe_stack import w1_probe_stack
+
+    calls = _install_fake_datasets([
+        {"code": "x=1", "license": "mit"},
+        {"code": "y=2", "license": None},
+    ])
+    cfg = tmp_path / "src.json"
+    cfg.write_text(json.dumps([
+        {"id": "hf:x", "kind": "huggingface",
+         "location": "codeparrot/github-code", "languages": ["c"],
+         "category": "code", "subpath": "C-all",
+         "ref": "refs/convert/parquet"}]), encoding="utf-8")
+    out = w1_probe_stack("c", limit=5, config=str(cfg))
+    assert out["rows"] == 2 and out["served_location"] == \
+        "codeparrot/github-code"
+    assert calls["data_dir"] == "C-all"
+    assert calls["revision"] == "refs/convert/parquet"
+
+
+def test_stage_download_tolerates_extra_config_keys(tmp_path):
+    # config entry me naye keys ('fallbacks') ho to Source(**entry) TypeError
+    # na de — from_dict filtering hi config-extensibility ka rasta hai
+    _install_gated_fake_datasets("nobody/unused")
+    from w1_build_corpus import _stage_download
+
+    entry = {"id": "hf:t", "kind": "huggingface", "location": "x/y",
+             "languages": ["c"], "category": "code", "license_hint": "MIT",
+             "fallbacks": [{"location": "fb/alt", "revision": "r1"}]}
+    out_root = tmp_path / "stage"
+    res = _stage_download(entry, budget=10_000, stage_root=str(out_root),
+                          local_input=None)
+    assert res["files"] >= 1 and res["bytes"] > 0
+    marker = os.path.join(out_root, "hf_t", "_DONE")
+    assert os.path.exists(marker)                          # idempotent marker
+
+
+def test_downloader_default_has_no_silent_example_cap(tmp_path):
+    # max_examples=5000 default 1.2GB budget ko ~50MB par kaat deta tha —
+    # >=600M token target ke liye default UNLIMITED hona chahiye (budget
+    # hi cap hai)
+    from corpus.download.huggingface import HuggingFaceDownloader
+    from corpus.sources.registry import Source
+
+    _install_fake_datasets([{"content": "print(1)\n"}] * 7000)
+    src = Source(id="hf:many", kind="huggingface", location="x/y",
+                 languages=("python",))
+    dl = HuggingFaceDownloader(max_bytes=None)
+    staged = dl.fetch(src, str(tmp_path))
+    assert len(os.listdir(staged.root)) == 7000            # sab staged
