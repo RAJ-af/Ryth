@@ -274,3 +274,67 @@ def test_self_verify_yes_passes_no_fails():
     no = FakeTeacher(responses={}, default="no")
     assert self_verify(s, "answer text", yes) == []
     assert self_verify(s, "answer text", no) == ["self_verify said: no"]
+
+
+# --------------------------------------------------------------------- #
+# generate — end-to-end fake-teacher integration
+# --------------------------------------------------------------------- #
+
+from sft.generate import generate, package
+from sft.tasks.prompts import SYSTEM_PROMPT, TEACHER_SYSTEM
+
+
+def _good_responses():
+    return {
+        "Implement this Python function":
+            "def add_two(a, b):\n    \"\"\"Add.\"\"\"\n    return a + b",
+        "has a subtle bug":
+            "def add_two(a, b):\n    return a + b",
+        "Complete the body":
+            "    result = a + b\n    return result",
+        "What does this Python function do":
+            ("It computes the sum of its two arguments and returns that "
+             "value directly, which works for both integers and floats."),
+        "Write unit tests":
+            "assert add_two(1, 2) == 3\nassert add_two(-1, 1) == 0",
+    }
+
+
+def test_generate_end_to_end_filters_and_stats():
+    seeds = build_seeds([_rec()])
+    teacher = FakeTeacher(responses=_good_responses(), default="junk")
+    examples, stats = generate(seeds, teacher, progress=lambda *a, **k: None)
+    assert stats["n_generated"] == len(seeds) > 0
+    assert stats["n_passed"] == len(examples)
+    assert 0.0 <= stats["pass_rate"] <= 1.0
+    assert set(stats["per_task"]) == {s.task for s in seeds}
+    # har example: persona system + user + assistant, directive leak NAHI
+    for e in examples:
+        assert e.messages[0]["content"] == SYSTEM_PROMPT
+        assert e.messages[-1]["role"] == "assistant"
+        for m in e.messages:
+            assert "\n\n[" not in m["content"]          # directive leak nahi
+            assert TEACHER_SYSTEM not in m["content"]
+    # junk default sab non-matching seeds me gaya hoga — reasons me dikhega
+    assert sum(stats["filter_reasons"].values()) == \
+        stats["n_generated"] - stats["n_passed"]
+
+
+def test_generate_dedup_collapses_identical_answers():
+    seeds = build_seeds([_rec()])
+    same = FakeTeacher(default="def same():\n    return 42\n")
+    _, stats = generate(seeds, same, progress=lambda *a, **k: None)
+    examples2, stats2 = generate(seeds, same, dedup=True,
+                                 progress=lambda *a, **k: None)
+    assert stats2["n_passed"] <= stats["n_passed"]
+    assert any("duplicate" in r for r in stats2["filter_reasons"])
+
+
+def test_package_rows_render_without_tokenizer():
+    es = [Example(task="t", messages=[
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": "a"}])]
+    rows = package(es, tok=None)
+    assert len(rows) == 1 and "<|system|>" in rows[0]["text"]
+    assert validate_example(rows[0]) == []
