@@ -141,3 +141,35 @@ def test_fake_teacher_routes_by_fragment():
                      default="plain answer")
     assert ft.complete("s", "please Write unit tests here") == "assert True"
     assert ft.complete("s", "anything else") == "plain answer"
+
+
+# --------------------------------------------------------------------- #
+# tasks/prompts — teacher vs dataset turns alag
+# --------------------------------------------------------------------- #
+
+from sft.tasks.prompts import (KNOWN_TASKS, SYSTEM_PROMPT, TEACHER_SYSTEM,
+                               directive_for, teacher_user)
+
+
+def test_known_tasks_are_the_spec_five():
+    assert KNOWN_TASKS == ("bug_fix", "docstring_to_code", "explain_code",
+                           "instruction_to_code", "test_gen")
+
+
+def test_persona_and_teacher_system_distinct():
+    assert "Ryth" in SYSTEM_PROMPT
+    assert SYSTEM_PROMPT not in TEACHER_SYSTEM
+    assert "training data" in TEACHER_SYSTEM
+
+
+def test_directive_lookup_and_error():
+    assert "function BODY" in directive_for("docstring_to_code")
+    assert "assert" in directive_for("test_gen")
+    with pytest.raises(ValueError, match="unknown sft task"):
+        directive_for("nonexistent_task")
+
+
+def test_teacher_user_appends_directive_only_for_caller():
+    u = teacher_user("Implement add.", "instruction_to_code")
+    assert u.startswith("Implement add.")          # stored turn pehle
+    assert "[" in u and "]" in u                    # directive bracketed
