@@ -173,3 +173,61 @@ def test_teacher_user_appends_directive_only_for_caller():
     u = teacher_user("Implement add.", "instruction_to_code")
     assert u.startswith("Implement add.")          # stored turn pehle
     assert "[" in u and "]" in u                    # directive bracketed
+
+
+# --------------------------------------------------------------------- #
+# tasks/builders — corpus records se 5 seed types
+# --------------------------------------------------------------------- #
+
+from sft.tasks.builders import ALL_BUILDERS, build_seeds
+
+_FUNC_SRC = '''def add_two(a, b):
+    """Return the sum of two numbers, supporting ints and floats."""
+    return a + b
+
+
+def shout(s):
+    """Uppercase the string and append an exclamation mark for excitement."""
+    return s.upper() + "!"
+'''
+
+
+def _rec(content=_FUNC_SRC, language="python", path="mod/math.py",
+         h="deadbeef01"):
+    # NOTE: corpus.tasks.builders._example() ko repository/split/license bhi
+    # mangta hai — full record duck-type yahi hai (ledger ruling).
+    return types.SimpleNamespace(content=content, language=language,
+                                 path=path, hash=h, repository="r", split="train",
+                                 license="MIT")
+
+
+def test_all_five_builders_registered_match_prompts():
+    from sft.tasks.prompts import KNOWN_TASKS
+    assert set(ALL_BUILDERS) == set(KNOWN_TASKS)
+
+
+def test_builders_cover_rich_record_all_tasks():
+    seeds = build_seeds([_rec()])
+    got = {s.task for s in seeds}
+    assert got == set(ALL_BUILDERS)                 # rich record => sab 5
+    for s in seeds:
+        assert s.language == "python" and s.source_path == "mod/math.py"
+        assert s.user_prompt and s.teacher_directive
+
+
+def test_build_seeds_deterministic_and_skips_empty():
+    a = [s.id for s in build_seeds([_rec(h="aa"), _rec(h="bb")])]
+    b = [s.id for s in build_seeds([_rec(h="bb"), _rec(h="aa")])]
+    assert a == b and len(a) == len(set(a))         # sorted + unique
+    assert build_seeds([_rec(content=""), _rec(language="c")]) == []
+
+
+def test_test_gen_validator_runs_asserts_locally():
+    seeds = build_seeds([_rec()])
+    tst = next(s for s in seeds if s.task == "test_gen")
+    i2c = next(s for s in seeds if s.task == "instruction_to_code")
+    assert tst.validate("assert add_two(1, 2) == 3\nassert add_two(0, 0) == 0") == []
+    probs = tst.validate("assert add_two(1, 2) == 99")
+    assert probs and "fail" in probs[0]
+    assert i2c.validate("def add_two(a, b):\n    return a + b") == []
+    assert i2c.validate("def broken(:\n")
