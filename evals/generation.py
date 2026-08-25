@@ -68,8 +68,17 @@ def load_model(ckpt_path: str, vocab_size: int | None = None, *,
         mcfg = RythConfig(**{k: v for k, v in cfg_dict.items()
                              if k in field_names})
     else:
-        assert preset is not None, "checkpoint me config nahi -- preset do"
-        mcfg = getattr(RythConfig, preset)(vocab_size=vocab_size or 32000)
+        # training checkpoints me "config" = vars(TrainConfig) hota hai
+        # (d_model nahi) — architecture ka sach metadata.model_preset me hai
+        meta = state.get("metadata") or {}
+        name = preset or (meta.get("model_preset")
+                          if isinstance(meta, dict) else None)
+        if not name:
+            raise ValueError(
+                "checkpoint me model-config bhi nahi aur preset bhi nahi — "
+                "--preset do (ryth_30m|ryth_125m|...) ya checkpoint "
+                "metadata.model_preset rakho")
+        mcfg = getattr(RythConfig, name)(vocab_size=vocab_size or 32000)
     if seq_len > mcfg.max_seq_len:
         mcfg.max_seq_len = seq_len
     net = RythForCausalLM(mcfg)

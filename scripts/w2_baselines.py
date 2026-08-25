@@ -48,7 +48,7 @@ def _random_model(vocab: int, seq_len: int):
     cfg = RythConfig.ryth_30m()
     cfg.vocab_size = vocab
     cfg.max_seq_len = seq_len
-    return RythForCausalLM(cfg)
+    return RythForCausalLM(cfg).eval()               # eval-mode: future dropout-safe
 
 
 def run_all(results_dir: str, limit: int = 40, max_new_tokens: int = 32,
@@ -77,9 +77,14 @@ def run_all(results_dir: str, limit: int = 40, max_new_tokens: int = 32,
         n_chars = len(text)
     print(f"[val] python held-out chars={n_chars:,}")
 
+    # baseline provenance — post-training rerun isi se compare hoga (W2 review)
+    prov = {"tokenizer": "near-byte-260", "model_init_seed": 1234,
+            "checkpoint": "random-init", "seq_len": 256, "limit": limit}
+
     he = he_eval(load_problems(os.path.join(bench_dir, "humaneval.jsonl.gz"))[:limit],
                  model=model, tok=tok, n_samples=1, ks=(1,),
                  max_new_tokens=max_new_tokens, progress=quiet)
+    he.setdefault("meta", {}).update(prov)
     with open(os.path.join(results_dir, "w2_humaneval_baseline.json"),
               "w", encoding="utf-8") as f:
         json.dump(he, f, indent=2)
@@ -87,6 +92,7 @@ def run_all(results_dir: str, limit: int = 40, max_new_tokens: int = 32,
     mp = mp_eval(mbpp.load_mbpp(os.path.join(bench_dir, "mbpp.jsonl"))[:limit],
                  model=model, tok=tok, n_samples=1, ks=(1,),
                  max_new_tokens=max_new_tokens, progress=quiet)
+    mp.setdefault("meta", {}).update(prov)
     with open(os.path.join(results_dir, "w2_mbpp_baseline.json"),
               "w", encoding="utf-8") as f:
         json.dump(mp, f, indent=2)
@@ -94,7 +100,9 @@ def run_all(results_dir: str, limit: int = 40, max_new_tokens: int = 32,
     ppl = evaluate_files(model, tok, {"python": val_py}, seq_len=256)
     with open(os.path.join(results_dir, "w2_ppl_baseline.json"),
               "w", encoding="utf-8") as f:
-        json.dump({"meta": {"task": "ppl"}, "perplexity": ppl}, f, indent=2)
+        json.dump({"meta": {"task": "ppl",
+                            "val_python_chars": n_chars, **prov},
+                   "perplexity": ppl}, f, indent=2)
 
     print("[baselines]", json.dumps(
         {"pass@1_he": he["pass_at_k"]["pass@1"],

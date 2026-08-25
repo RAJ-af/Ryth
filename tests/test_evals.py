@@ -102,6 +102,19 @@ def test_run_program_pass_fail_timeout_syntax():
     assert not r.ok and not r.timed_out          # SyntaxError = non-zero exit
 
 
+def test_run_program_spawn_failure_is_soft(monkeypatch):
+    # fork failure / resource limit -> poora sweep abort NAHI hona chahiye (W2 fix)
+    import subprocess as sp
+
+    def boom(*a, **k):
+        raise OSError("EAGAIN: resource temporarily unavailable")
+
+    monkeypatch.setattr(sp, "run", boom)
+    r = run_program("print('x')\n")
+    assert not r.ok and not r.timed_out
+    assert "unavailable" in r.stderr.lower()
+
+
 # --------------------------------------------------------------------- #
 # datasets — problem loader + fixtures
 # --------------------------------------------------------------------- #
@@ -200,6 +213,43 @@ def test_load_model_from_checkpoint(tmpdir):
     x = torch.randint(0, tok.vocab_size, (1, 4))
     logits, _ = loaded(x)
     assert logits.shape[-1] == tok.vocab_size
+
+
+def test_load_model_infers_preset_from_training_metadata(tmpdir, monkeypatch):
+    # REAL W1 checkpoints: "config" = vars(TrainConfig) (d_model NAHI),
+    # metadata.model_preset hi architecture ka sach hai (W2 review finding).
+    from model import RythConfig as RC
+
+    monkeypatch.setattr(
+        RC, "tiny_rev", classmethod(
+            lambda cls, **kw: cls(d_model=64, n_layers=2, n_heads=4,
+                                  n_kv_heads=2, max_seq_len=32, **kw)),
+        raising=False)
+    tok = _tok()
+    cfg = RC.tiny_rev(vocab_size=tok.vocab_size)
+    model = RythForCausalLM(cfg)
+    state = {"model": model.state_dict(), "optimizer": {}, "step": 3,
+             "best_val": 9.9,
+             "config": {"data_dir": "x", "lr": 6e-4},     # TrainConfig vars
+             "metadata": {"model_preset": "tiny_rev", "seed": 1234}}
+    ck = os.path.join(str(tmpdir), "final.pt")
+    torch.save(state, ck)
+
+    loaded = load_model(ck, tok.vocab_size, preset=None, seq_len=32)
+    assert loaded.config.d_model == 64                    # metadata se mila
+    x = torch.randint(0, tok.vocab_size, (1, 4))
+    logits, _ = loaded(x)
+    assert logits.shape[-1] == tok.vocab_size
+
+    # metadata me preset bhi nahi + param None -> loud, samajhdaar error
+    state["metadata"] = {}
+    ck2 = os.path.join(str(tmpdir), "bare.pt")
+    torch.save(state, ck2)
+    try:
+        load_model(ck2, tok.vocab_size, preset=None, seq_len=32)
+        raise AssertionError("expected ValueError without any preset source")
+    except ValueError as e:
+        assert "preset" in str(e)
 
 
 # --------------------------------------------------------------------- #
@@ -364,7 +414,32 @@ def test_cli_ppl_smoke(tmpdir):
                "--files", f"py={txt}", "--out", outj])
     assert rc == 0
     with open(outj, encoding="utf-8") as f:
-        assert "py" in json.load(f)["perplexity"]
+        data = json.load(f)
+    assert "py" in data["perplexity"]
+    # provenance (W2 review): results runs ke beech compare hone chahiye
+    meta = data["meta"]
+    assert meta["ckpt"] == "b.pt"
+    assert meta["seq_len"] == 64 or meta["seq_len"] >= 32
+    assert "tokenizer" in meta and "device" in meta
+
+
+def test_cli_preset_auto_from_metadata(tmpdir):
+    # --preset ab OPTIONAL hai: real checkpoint apna preset khud batata hai
+    from evals.cli import main
+
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=64,
+                     d_model=64, n_layers=2, n_heads=4, n_kv_heads=2)
+    model = RythForCausalLM(cfg)
+    ck = os.path.join(str(tmpdir), "b.pt")
+    save_checkpoint(ck, model, cfg)                       # isme config dict hota hai
+    txt = os.path.join(str(tmpdir), "t.txt")
+    with open(txt, "w", encoding="utf-8") as f:
+        f.write("def f():\n    return 1\n" * 10)
+    outj = os.path.join(str(tmpdir), "r.json")
+    rc = main(["ppl", "--ckpt", ck, "--tokenizer", tk_path(tok),
+               "--files", f"py={txt}", "--out", outj])    # NO --preset flag
+    assert rc == 0
 
 # ── W2: baseline tooling ─────────────────────────────────────────────────────
 
@@ -398,6 +473,10 @@ def test_key_metrics_extracts_shapes(tmp_path):
     ppl = {"meta": {"task": "ppl"}, "perplexity": {"python": 10.5}}
     assert key_metrics(ppl) == {"python": 10.5}
     assert key_metrics({"meta": {}}) == {}            # kuch comparable nahi
+    # collision guard (W2 review): top-level numeric flattened key ko overwrite
+    # na kare — pehli value hi rehti hai
+    weird = {"pass_at_k": {"pass@1": 0.25}, "pass@1": 999}
+    assert key_metrics(weird)["pass@1"] == 0.25
 
 
 def test_report_subcommand_writes_markdown(tmp_path, capsys):
@@ -454,6 +533,35 @@ def test_download_mbpp_pages_hf_api(tmp_path, monkeypatch):
     assert rows[0]["task_id"] == "train-0"       # original schema passthrough
 
 
+def test_download_mbpp_survives_missing_num_rows_total(tmp_path, monkeypatch):
+    # HF API num_rows_total chhod de toh SILENT truncation nahi honi chahiye —
+    # empty page par bhi poora data aata rahe (W2 review fix).
+    import urllib.parse
+    import urllib.request as U
+    import evals.datasets as D
+
+    def page(split, offset, n):
+        body = json.dumps({"rows": [{"row_idx": offset + i,
+                                     "row": {"task_id": f"{split}-{offset+i}",
+                                             "text": "t", "code": "c",
+                                             "test_list": ["assert t"]}}
+                                    for i in range(n)]}).encode()
+        return type("R", (), {"__enter__": lambda s: s,
+                              "__exit__": lambda s, *a: False,
+                              "read": lambda s: body})()
+
+    def fake_urlopen(req, timeout=None):
+        url = getattr(req, "full_url", req)
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        split, off = q["split"][0], int(q["offset"][0])
+        return page(split, off, 50 if off < 100 else 0)    # total field NAHI
+
+    monkeypatch.setattr(U, "urlopen", fake_urlopen)
+    out = D.download_mbpp(str(tmp_path))
+    rows = [json.loads(l) for l in open(out, encoding="utf-8")]
+    assert len(rows) == 300                      # 3 splits x (50+50), truncate NAHI
+
+
 def test_bench_files_present_and_parse():
     # files committed hain — offline count check, koi download nahi
     from evals import mbpp as _m
@@ -498,3 +606,12 @@ def test_run_all_smoke_tiny(tmp_path):
     assert s["mbpp"]["pass_at_k"]["pass@1"] == 0.0
     assert s["ppl"]["python"] > 1.0
     assert (tmp_path / "results" / "w2_ppl_baseline.json").exists()
+    # baseline JSONs self-describing hone chahiye (W2 review: config echo)
+    pplj = json.load(open(tmp_path / "results" / "w2_ppl_baseline.json",
+                          encoding="utf-8"))
+    m = pplj["meta"]
+    assert m["model_init_seed"] == 1234 and m["tokenizer"] == "near-byte-260"
+    assert m["seq_len"] == 256 and m["checkpoint"] == "random-init"
+    hej = json.load(open(tmp_path / "results" / "w2_humaneval_baseline.json",
+                         encoding="utf-8"))
+    assert hej["meta"]["limit"] == 2 and hej["meta"]["tokenizer"] == "near-byte-260"

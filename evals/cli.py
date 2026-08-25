@@ -40,9 +40,10 @@ def key_metrics(data: dict) -> dict:
         if k == "meta":
             continue
         if isinstance(v, dict):
-            flat.update(v)
+            for fk, fv in v.items():                 # flattened pehli value jeete —
+                flat.setdefault(fk, fv)              # top-level overwrite na kare
         elif isinstance(v, (int, float)):
-            flat[k] = v
+            flat.setdefault(k, v)                    # pehli value jeet-ti hai
     return flat
 
 
@@ -80,7 +81,9 @@ def main(argv=None) -> int:
         sp.add_argument("--tokenizer", required=True)
         sp.add_argument("--out", default=None)
         sp.add_argument("--device", default="cpu")
-        sp.add_argument("--preset", default="ryth_30m")
+        sp.add_argument("--preset", default=None,
+                        help="default: checkpoint khud batata hai "
+                             "(config ya metadata.model_preset)")
         sp.add_argument("--seq_len", type=int, default=1024)
 
     for name in ("humaneval", "mbpp"):
@@ -139,6 +142,16 @@ def main(argv=None) -> int:
                     mode=args.mode, temperature=args.temperature,
                     top_k=args.top_k, max_new_tokens=args.max_new_tokens,
                     timeout_s=args.timeout, ks=ks)
+
+    # provenance meta — spec §5: results runs ke beech compare hone chahiye
+    result.setdefault("meta", {}).update({
+        "ckpt": os.path.basename(args.ckpt),
+        "tokenizer": os.path.basename(args.tokenizer),
+        "device": args.device, "seq_len": args.seq_len})
+    if args.preset:
+        result["meta"]["preset"] = args.preset
+    if hasattr(args, "limit"):
+        result["meta"]["limit"] = getattr(args, "limit")
 
     save_results(result, out)                      # ppl/humaneval/mbpp sab yahi
     print(f"\n== RESULTS ({args.task}) ==")

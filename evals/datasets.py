@@ -64,11 +64,22 @@ def download_humaneval(dest_dir: str) -> str:
 
 
 def _fetch_mbpp_rows() -> list[dict]:
-    """HF datasets-server se MBPP 'full' config ke sab rows (original schema)."""
+    """HF datasets-server se MBPP 'full' config ke sab rows (original schema).
+
+    num_rows_total missing ho toh bhi poora split aata hai (empty page par
+    break) — silent truncation nahi. Pathological server loop se bachne ko
+    per-split page-cap bhi hai.
+    """
     rows: list[dict] = []
     for split in _MBPP_SPLITS:
         offset = 0
+        pages = 0
         while True:
+            pages += 1
+            if pages > 500:                          # 964 rows / 100 = 10 pages
+                raise RuntimeError(                  # real cap se bahut door
+                    f"mbpp fetch: split {split!r} me 500+ pages — API "
+                    "paginated khatam nahi ho raha, abort")
             q = urllib.parse.urlencode({"dataset": _MBPP_DATASET,
                                         "config": "full", "split": split,
                                         "offset": offset, "length": 100})
@@ -79,8 +90,11 @@ def _fetch_mbpp_rows() -> list[dict]:
             got = page.get("rows", [])
             rows.extend(got)
             offset += len(got)
-            if not got or offset >= page.get("num_rows_total", 0):
-                break
+            if not got:
+                break                                # empty page = split khatam
+            total = page.get("num_rows_total")
+            if isinstance(total, int) and total > 0 and offset >= total:
+                break                                # normal end
     return [r["row"] for r in rows]
 
 

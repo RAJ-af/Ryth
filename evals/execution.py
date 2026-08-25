@@ -44,3 +44,7 @@ def run_program(code: str, timeout_s: float = 10.0) -> ExecResult:
                               stdout=(out or "")[-4000:],
                               stderr=f"TIMEOUT after {timeout_s}s",
                               timed_out=True)
+        except OSError as e:
+            # fork failure / resource limit — ek sample ka fail, sweep abort nahi
+            return ExecResult(ok=False, exit_code=None, stdout="",
+                              stderr=f"spawn failed: {e}", timed_out=False)
