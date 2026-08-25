@@ -247,3 +247,14 @@ def test_kaggle_train_resolve_overrides_eff_tokens():
         ["--micro_batch", "4", "--grad_accum", "2"])
     kt.resolve_args(ns)
     assert ns.eff_tokens == 4 * 2 * ns.seq_len             # override ke saath sahi
+
+
+def test_notebook_is_valid_json_with_w1_cells():
+    nb_path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "notebooks", "ryth_kaggle_train.ipynb")
+    nb = json.load(open(nb_path, encoding="utf-8"))
+    assert nb["nbformat"] >= 4
+    src = "\n".join("".join(c["source"]) for c in nb["cells"])
+    for needle in ("w1_build_corpus.py", "w1_train_tokenizer.py",
+                   "w1_pack_rds.py", "kaggle_train.py"):
+        assert needle in src, f"notebook missing {needle}"
