@@ -169,3 +169,47 @@ def test_time_probe_returns_positive_rate(tmp_path):
     texts = stratified_sample(str(tmp_path), target_chars=10 ** 9, seed=0)
     rate = time_probe(texts[:1], tok=BPETokenizer())
     assert rate > 0
+
+
+def _mini_rds_part(tmp_path, tag):
+    """Ek chhota sa part-dir banao jisme valid manifest + 1 shard ho (fixture).
+
+    Real ShardManager use karte hain (dataset/sharding.py) — wahi manifest
+    format likhta hai jo merge_manifests() padhega.
+    """
+    from dataset.config import RDEConfig
+    from dataset.sharding import ShardManager
+    from tokenizer.bpe import BPETokenizer
+
+    tok = BPETokenizer(); tok.train(["hello world"], vocab_size=350)
+    part = str(tmp_path / f"part_{tag}"); os.makedirs(part, exist_ok=True)
+    sm = ShardManager(part, RDEConfig(seq_len=4), tok)
+    ids = [1, 2, 3, 4, 5, 6, 7, 8]
+    sm.add_chunk(ids[:4], {"repo": f"r{tag}"})
+    sm.add_chunk(ids[4:], {"repo": f"r{tag}"})
+    sm.finalize({"chunks": 2}, lock={"tag": tag})
+    return part
+
+
+def test_merge_manifests_concatenates_shards(tmp_path):
+    from w1_pack_rds import merge_manifests
+
+    p1 = _mini_rds_part(tmp_path, "a"); p2 = _mini_rds_part(tmp_path, "b")
+    out = str(tmp_path / "merged")
+    mm = merge_manifests([p1, p2], out, extra_meta={"note": "w1"})
+    assert len(mm["shards"]) == 2
+    ds_paths = [os.path.join(out, s["file"]) for s in mm["shards"]]
+    assert all(os.path.exists(p_) for p_ in ds_paths)      # files copy hue
+    back = json.load(open(os.path.join(out, "manifest.json"), encoding="utf-8"))
+    assert back["note"] == "w1"
+
+
+def test_merged_dir_loadable_by_rdsdataset(tmp_path):
+    from dataset.dataset import RDSDataset
+    from w1_pack_rds import merge_manifests
+
+    p1 = _mini_rds_part(tmp_path, "a"); p2 = _mini_rds_part(tmp_path, "b")
+    out = str(tmp_path / "merged")
+    mm = merge_manifests([p1, p2], out, extra_meta={})
+    ds = RDSDataset(out)
+    assert len(ds) == sum(s.get("chunks", 0) for s in mm["shards"])
