@@ -7,6 +7,8 @@ hain (spec §5 — scores runs ke beech track hone chahiye).
 from __future__ import annotations
 
 import argparse
+import glob
+import json
 import os
 
 from .datasets import load_problems
@@ -25,6 +27,47 @@ def _auto_out(task: str, ckpt: str) -> str:
     stem = os.path.splitext(os.path.basename(ckpt))[0]
     os.makedirs("results", exist_ok=True)
     return os.path.join("results", f"{task}_{stem}.json")
+
+
+def key_metrics(data: dict) -> dict:
+    """Result JSON ko flat {metric: value} me todta hai (report table ke liye).
+
+    pass_at_k/perplexity jaise dicts flatten hote hain; top-level numeric
+    fields (n_problems) aise hi copy; meta skip.
+    """
+    flat: dict = {}
+    for k, v in data.items():
+        if k == "meta":
+            continue
+        if isinstance(v, dict):
+            flat.update(v)
+        elif isinstance(v, (int, float)):
+            flat[k] = v
+    return flat
+
+
+def cmd_report(results_dir: str, out_path: str | None) -> int:
+    """results/*.json ka markdown comparison table — print ya --out file."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "*.json"))):
+        try:
+            with open(path, encoding="utf-8") as f:
+                metrics = key_metrics(json.load(f))
+        except (json.JSONDecodeError, OSError):
+            continue                                 # corrupt/partial result skip
+        cells = ", ".join(
+            f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}"
+            for k, v in sorted(metrics.items()))
+        rows.append((os.path.basename(path), cells or "-"))
+    lines = ["| file | metrics |", "|---|---|"]
+    lines += [f"| {name} | {cells} |" for name, cells in rows]
+    table = "\n".join(lines) + "\n"
+    if out_path:
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(table)
+    else:
+        print(table, end="")
+    return 0
 
 
 def main(argv=None) -> int:
@@ -59,7 +102,15 @@ def main(argv=None) -> int:
     sp.add_argument("--files", action="append", required=True,
                     help="LABEL=PATH (repeatable)")
 
+    sp = sub.add_parser("report",
+                        help="results dir ke JSONs ka markdown table")
+    sp.add_argument("results_dir")
+    sp.add_argument("--out", default=None)
+
     args = ap.parse_args(argv)
+
+    if args.task == "report":                        # ckpt/tokenizer ki zaroorat nahi
+        return cmd_report(args.results_dir, args.out)
 
     from dataset import load_bpe_tokenizer
     tok = load_bpe_tokenizer(args.tokenizer)

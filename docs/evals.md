@@ -16,6 +16,7 @@ ryth-eval mbpp     --ckpt best.pt --tokenizer tok/tokenizer.json \
 ```
 
 Results land in `results/*.json` — track them across runs (spec §5).
+Compare them all at once: `ryth-eval report results [--out table.md]`.
 
 ## Getting real benchmark files
 

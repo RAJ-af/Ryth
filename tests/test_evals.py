@@ -387,3 +387,30 @@ def test_cli_has_limit_flag():
     with contextlib.redirect_stdout(buf), pytest.raises(SystemExit):
         main(["humaneval", "--help"])
     assert "--limit" in buf.getvalue()
+
+
+def test_key_metrics_extracts_shapes(tmp_path):
+    from evals.cli import key_metrics
+
+    he = {"meta": {"task": "humaneval"}, "pass_at_k": {"pass@1": 0.0},
+          "n_problems": 3}
+    assert key_metrics(he) == {"pass@1": 0.0, "n_problems": 3}
+    ppl = {"meta": {"task": "ppl"}, "perplexity": {"python": 10.5}}
+    assert key_metrics(ppl) == {"python": 10.5}
+    assert key_metrics({"meta": {}}) == {}            # kuch comparable nahi
+
+
+def test_report_subcommand_writes_markdown(tmp_path, capsys):
+    from evals.cli import main
+
+    d = tmp_path / "results"; d.mkdir()
+    json.dump({"pass_at_k": {"pass@1": 0.0}},
+              open(d / "w2_humaneval_baseline.json", "w"))
+    rc = main(["report", str(d)])
+    assert rc == 0
+    tbl = capsys.readouterr().out
+    assert "w2_humaneval_baseline.json" in tbl and "pass@1" in tbl
+    out_file = d / "table.md"
+    rc2 = main(["report", str(d), "--out", str(out_file)])
+    assert rc2 == 0
+    assert "pass@1" in out_file.read_text(encoding="utf-8")
