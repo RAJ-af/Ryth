@@ -54,9 +54,9 @@ def merge_manifests(part_dirs: list[str], out_dir: str,
 def _discover_repo_dirs(raw_root: str) -> list[str]:
     """Stage tree ke andar repo-level dirs (jahan files hain)."""
     repos = []
-    for dp, fns, _ in os.walk(raw_root):
-        if any(not d.startswith("_") and os.path.isfile(os.path.join(dp, d))
-               for d in fns):
+    for dp, _subdirs, files in os.walk(raw_root):
+        if any(not f.startswith("_") and os.path.isfile(os.path.join(dp, f))
+               for f in files):
             repos.append(dp)
     return sorted(repos)
 
@@ -71,10 +71,13 @@ def main(argv=None) -> int:
     p.add_argument("--out", default="rds_w1")
     a = p.parse_args(argv)
 
-    from dataset import load_bpe_tokenizer
+    from dataset import RDEConfig, load_bpe_tokenizer
     from dataset.pipeline import RDEPipeline
 
     tok = load_bpe_tokenizer(a.tok)
+    cfg = RDEConfig(seq_len=a.seq_len, vocab_size=tok.vocab_size,
+                    tokenizer_version=getattr(tok, "version", 1),
+                    shard_max_bytes=256 * 1024 ** 2)
 
     repos = _discover_repo_dirs(a.raw)
     if not repos:
@@ -100,7 +103,7 @@ def main(argv=None) -> int:
                 except OSError:                          # FS symlink support nahi
                     shutil.copytree(r, dst)
         if not os.path.exists(done):
-            pipe = RDEPipeline(tok)
+            pipe = RDEPipeline(tok, cfg)
             pipe.run(part_in, part_out, verbose=True)
             with open(done, "w", encoding="utf-8") as f:
                 f.write("{}")

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 
 
 DEFAULT_TOTAL_BYTES = 2_400_000_000          # ~2.4 GB text ≈ 600M+ code tokens
@@ -50,7 +51,10 @@ def _stage_download(entry: dict, budget: int, stage_root: str,
     elif src.kind == "local":
         if not local_input:
             raise SystemExit(f"{src.id}: local source needs --input DIR")
-        root = local_input                          # as-is tree
+        # materialize into stage_dir (HF ki tarah) taaki downstream stages
+        # (tokenizer/pack) hamesha stage tree hi padhein
+        shutil.copytree(local_input, stage_dir, dirs_exist_ok=True)
+        root = stage_dir
     else:
         raise SystemExit(f"{src.id}: kind {src.kind} not wired for W1 yet")
     files, total = 0, 0

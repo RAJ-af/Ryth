@@ -14,8 +14,17 @@ import random
 import time
 
 
-def _bucket_of(path: str) -> str:
-    return ".py" if path.endswith(".py") else ".c"
+_CODE_EXTS = (".py", ".c")                   # sirf code files bucket hoti hain
+
+
+def _bucket_of(path: str) -> str | None:
+    name = os.path.basename(path)
+    if name.startswith("_"):                 # _DONE jaise markers skip
+        return None
+    for e in _CODE_EXTS:
+        if name.endswith(e):
+            return e
+    return None                              # .json/logs waghera training me nahi
 
 
 def stratified_sample(root: str, target_chars: int,
@@ -25,7 +34,7 @@ def stratified_sample(root: str, target_chars: int,
     for dp, _, fns in os.walk(root):
         for fn in fns:
             b = _bucket_of(fn)
-            if b in buckets:
+            if b is not None:
                 buckets[b].append(os.path.join(dp, fn))
     rng = random.Random(seed)
     for files in buckets.values():
