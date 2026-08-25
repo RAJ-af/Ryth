@@ -15,15 +15,20 @@ from .base import Downloader, DownloadError, StagedRepo
 _CODE_FIELDS = ("content", "code", "func_code_string", "whole_func_string",
                 "text", "source", "body")
 _EXT = {"python": ".py", "javascript": ".js", "typescript": ".ts", "go": ".go",
-        "rust": ".rs", "java": ".java", "cpp": ".cpp", "markdown": ".md"}
+        "rust": ".rs", "java": ".java", "cpp": ".cpp", "c": ".c",
+        "markdown": ".md"}
 
 
 class HuggingFaceDownloader(Downloader):
     kind = "huggingface"
 
-    def __init__(self, split: str = "train", max_examples: int = 5000):
+    def __init__(self, split: str = "train", max_examples: int = 5000,
+                 max_bytes: int | None = None):
         self.split = split
         self.max_examples = max_examples
+        # byte budget: staged output is se bada hua to streaming rok do
+        # (W1 scale pe poori dataset kabhi nahi utarti — budget chahiye)
+        self.max_bytes = max_bytes
 
     def available(self) -> bool:
         try:
@@ -41,7 +46,9 @@ class HuggingFaceDownloader(Downloader):
 
         try:
             ds = datasets.load_dataset(source.location, split=self.split,
-                                       streaming=True)
+                                       streaming=True,
+                                       data_dir=(getattr(source, "subpath", "")
+                                                 or None))
         except Exception as e:                          # pragma: no cover - network
             raise DownloadError(f"hf load_dataset failed for {source.location!r}: {e}")
 
@@ -52,6 +59,7 @@ class HuggingFaceDownloader(Downloader):
         ext = _EXT.get(lang, ".txt")
 
         n = 0
+        staged_bytes = 0
         for ex in ds:                                   # pragma: no cover - network
             field = next((f for f in _CODE_FIELDS if ex.get(f)), None)
             if not field:
@@ -63,6 +71,9 @@ class HuggingFaceDownloader(Downloader):
                       encoding="utf-8") as f:
                 f.write(text)
             n += 1
+            staged_bytes += len(text)
+            if self.max_bytes is not None and staged_bytes >= self.max_bytes:
+                break
             if n >= self.max_examples:
                 break
         if n == 0:                                      # pragma: no cover - network
