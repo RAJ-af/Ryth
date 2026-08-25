@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kaggle kernels list *)",
+      "Bash(kaggle kernels status *)",
+      "Bash(kaggle models list *)",
+      "Bash(kaggle datasets list *)",
+      "Bash(kaggle config view *)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose version)",
+      "Bash(gh codespace list *)",
+      "Bash(python3 -m pytest*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(pip install -e*)",
+      "Bash(python3 .superpowers/*)"
+    ]
+  }
+}
