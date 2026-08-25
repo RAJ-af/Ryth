@@ -465,3 +465,36 @@ def test_bench_files_present_and_parse():
     assert len(he) == 164
     assert len(mp) >= 800
     assert all(p.prompt and p.test for p in he[:5])
+
+
+def test_build_val_python_deterministic(tmp_path):
+    # alag processes me do baar -> identical bytes (sorted order + pure concat)
+    import subprocess
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out1 = tmp_path / "v1.txt"; out2 = tmp_path / "v2.txt"
+    for o in (out1, out2):
+        subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); sys.path.insert(0, %r); "
+             "from w2_baselines import build_val_python; "
+             "print(build_val_python(%r, %r))"
+             % (os.path.join(root, "scripts"), root,
+                os.path.join(root, "bench"), str(o))],
+            check=True, capture_output=True)
+    b1 = out1.read_bytes(); b2 = out2.read_bytes()
+    assert b1 == b2 and len(b1) > 1000
+
+
+def test_run_all_smoke_tiny(tmp_path):
+    # bahut chhota limit — sirf wiring prove (random weights, score 0 hi hoga)
+    from w2_baselines import run_all
+
+    s = run_all(str(tmp_path / "results"), limit=2, max_new_tokens=4,
+                bench_dir=os.path.join(os.path.dirname(
+                    os.path.dirname(os.path.abspath(__file__))), "bench"),
+                val_max_chars=2000)          # smoke: ~180 windows nahi, ~8
+    assert s["humaneval"]["pass_at_k"]["pass@1"] == 0.0
+    assert s["mbpp"]["pass_at_k"]["pass@1"] == 0.0
+    assert s["ppl"]["python"] > 1.0
+    assert (tmp_path / "results" / "w2_ppl_baseline.json").exists()
