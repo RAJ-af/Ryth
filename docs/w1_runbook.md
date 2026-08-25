@@ -24,6 +24,9 @@ compute Kaggle par; ye doc exact click-path deta hai.
 
 1. Notebook right panel → **Output** → "Save Version" → private dataset banao,
    naam **`w1-prep`** (outputs: `corpus_out/`, `tok/`, `rds_w1/`, `val_src/`).
+   NOTE: Section A sab kuch `/kaggle/working/prep` me likhta hai — wahi
+   folder Save Version me persist hota hai (`/kaggle/work` scratch hai,
+   use me kabhi mat likhna).
 2. Expected sizes: corpus_out ~2.4 GB text, rds_w1 ~2–3 GB shards, val_src tiny.
 
 ## 3. GPU train session (~2–4h GPU quota)
@@ -66,8 +69,10 @@ compute Kaggle par; ye doc exact click-path deta hai.
   location/revision change config-level fix hai.
 - **Session beech me mari**: wahi section dobara Run karo — `_DONE` markers +
   `latest.pt` resume sab handle karte hain (same `/kaggle/working` path).
-- **fp16 NaN loss T4 par**: `--dtype bf16` try karo (T4 support karta hai), ya
-  `--grad_ckpt` ke saath fp32 fallback — speed thodi giregi, stability milegi.
+- **fp16 NaN loss T4 par**: `--grad_ckpt` ke saath fp32 fallback karo
+  (T4/sm_75 me native bf16 NAHI hai — bf16 flag error ya bahut slow emulation
+  dega). Ampere+ accelerator mila ho tabhi bf16 try karo. Speed giregi,
+  stability milegi.
 - **Tokenizer ETA bahut lambi** (>3h): `--sample-mb 30` kar do (quality ka
   negligible effect @24k vocab) — probe line batayegi naya ETA.
 - **License column mila hi nahi** (probe me `unknown` dominant): policy

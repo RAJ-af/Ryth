@@ -22,16 +22,31 @@ _PROPAGATE_KEYS = ("format", "rds_version", "tokenizer_version",
 
 def merge_manifests(part_dirs: list[str], out_dir: str,
                     extra_meta: dict | None = None) -> dict:
-    """Part manifests ko ek final manifest me jodo (shard files copy hote hain)."""
+    """Part manifests ko ek final manifest me jodo (shard files copy hote hain).
+
+    Config keys (_PROPAGATE_KEYS) pehle part se aate hain; baaki parts me
+    same key ALAG value par loud SystemExit — silent training-data corruption
+    se bachne ke liye (review fix).
+    """
     os.makedirs(out_dir, exist_ok=True)
     shards: list[dict] = []
     stats_total: dict = {}
     seen_names: set[str] = set()
-    propagated: dict = {}
+    propagated: dict | None = None
     for pd in part_dirs:
         mf = json.load(open(os.path.join(pd, "manifest.json"), encoding="utf-8"))
-        if not propagated:
+        if propagated is None:
             propagated = {k: mf[k] for k in _PROPAGATE_KEYS if k in mf}
+        else:
+            mismatched = [k for k in _PROPAGATE_KEYS
+                          if k in mf and k in propagated
+                          and mf[k] != propagated[k]]
+            if mismatched:
+                raise SystemExit(
+                    f"[pack] part {pd!r} ka config pehle part se alag hai: "
+                    f"{mismatched} — purane parts purani settings ke saath "
+                    f"bane hain; unhe delete karke same settings par dobara "
+                    f"pack karo.")
         for sh in mf.get("shards", []):
             fname = sh["file"]
             while fname in seen_names:                  # naam takraaye toh prefix
@@ -59,6 +74,37 @@ def _discover_repo_dirs(raw_root: str) -> list[str]:
                for f in files):
             repos.append(dp)
     return sorted(repos)
+
+
+def _stage_repos(group: list[str], part_in: str) -> None:
+    """Repos ko part_in me symlink karo (disk bachao); FS support na ho to copy.
+
+    Pehle se maujood link (chahe dangling ho) pehle hata dete hain — warna
+    `os.symlink` FileExistsError deta aur crash hota (review fix).
+    """
+    for r in group:
+        dst = os.path.join(
+            part_in,
+            os.path.basename(r) or f"repo_{len(os.listdir(part_in))}")
+        try:
+            if os.path.lexists(dst) and os.path.islink(dst):
+                os.unlink(dst)                          # stale/dangling link
+            os.symlink(os.path.abspath(r), dst)
+        except OSError:                                 # symlink unsupported FS
+            shutil.copytree(r, dst)
+
+
+def _wipe_if_dirty(part_out: str) -> bool:
+    """_DONE ke bina existing part_out => pichhli crash ka mal — saaf karo.
+
+    Warna RDEPipeline adhoore shards ke beech likhta aur merge me corrupt
+    data ja sakta tha (review fix). DONE wala part untouched.
+    """
+    if os.path.isdir(part_out) and not os.path.exists(
+            os.path.join(part_out, "_DONE")):
+        shutil.rmtree(part_out)
+        return True
+    return False
 
 
 def main(argv=None) -> int:
@@ -93,15 +139,10 @@ def main(argv=None) -> int:
         part_out = os.path.join(a.out, f"part_{gi:02d}")
         done = os.path.join(part_out, "_DONE")
         os.makedirs(part_in, exist_ok=True)
-        for r in group:                                  # symlink: disk bachao
-            dst = os.path.join(
-                part_in,
-                os.path.basename(r) or f"repo_{len(os.listdir(part_in))}")
-            if not os.path.exists(dst):
-                try:
-                    os.symlink(os.path.abspath(r), dst)
-                except OSError:                          # FS symlink support nahi
-                    shutil.copytree(r, dst)
+        _stage_repos(group, part_in)
+        if _wipe_if_dirty(part_out):
+            print(f"[pack] part_{gi:02d} adhoora tha (crash?) — wipe karke "
+                  f"dobara")
         if not os.path.exists(done):
             pipe = RDEPipeline(tok, cfg)
             pipe.run(part_in, part_out, verbose=True)

@@ -224,14 +224,21 @@ def resolve_args(a):
     return a
 
 
+def apply_smoke(a):
+    """--smoke overrides + eff_tokens dobara (warna print stale rehta tha)."""
+    a.vocab, a.seq_len = 2000, 128
+    a.micro_batch, a.grad_accum = 8, 2
+    a.steps, a.warmup = 60, 10
+    a.resume_demo = True
+    a.eff_tokens = a.micro_batch * a.grad_accum * a.seq_len
+    return a
+
+
 def main(argv=None):
     args = resolve_args(build_parser().parse_args(argv))
 
     if args.smoke:
-        args.vocab, args.seq_len = 2000, 128
-        args.micro_batch, args.grad_accum = 8, 2
-        args.steps, args.warmup = 60, 10
-        args.resume_demo = True
+        apply_smoke(args)
 
     from training import TrainConfig, Trainer
 

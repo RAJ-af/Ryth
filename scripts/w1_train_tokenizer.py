@@ -29,13 +29,18 @@ def _bucket_of(path: str) -> str | None:
 
 def stratified_sample(root: str, target_chars: int,
                       seed: int = 1234) -> list[str]:
-    """Extension-buckets (.py vs .c) me round-robin — dono bhashaein barabar."""
+    """Extension-buckets (.py vs .c) round-robin; chhoti bucket khatam hone
+    par bachi hui demand poori bhasha se — C≪Python ho toh sample Python-heavy
+    hoga (stratification best-effort hai, guarantee nahi)."""
     buckets: dict[str, list[str]] = {".py": [], ".c": []}
     for dp, _, fns in os.walk(root):
         for fn in fns:
             b = _bucket_of(fn)
             if b is not None:
                 buckets[b].append(os.path.join(dp, fn))
+    for files in buckets.values():
+        files.sort()              # os.walk ka order FS-dependent hota hai —
+                                  # sort ke bina same seed alag sample deta
     rng = random.Random(seed)
     for files in buckets.values():
         rng.shuffle(files)
@@ -91,7 +96,8 @@ def main(argv=None) -> int:
     print(f"[sample] files={len(texts)} chars={total:,}")
     rate = time_probe(texts)
     eta_min = total / max(rate, 1.0) / 60.0
-    print(f"[probe] ~{rate:,.0f} chars/sec -> ETA ~{eta_min:.0f} min")
+    print(f"[probe] ~{rate:,.0f} chars/sec -> ETA >= {eta_min:.0f} min "
+          f"(lower bound — 24k vocab par merges mehnat zyada maangte hain)")
     if a.probe_only:
         return 0
 

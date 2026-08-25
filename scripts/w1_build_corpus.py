@@ -20,10 +20,27 @@ DEFAULT_TOTAL_BYTES = 2_400_000_000          # ~2.4 GB text ≈ 600M+ code token
 
 
 def plan_budget(entries: list[dict], total_bytes: int) -> dict[str, int]:
-    """Total byte budget ko sources me `weight` ke proportional baant do."""
-    weights = [max(1, int(e.get("weight", 1))) for e in entries]
+    """Total byte budget ko sources me `weight` ke proportional baant do.
+
+    Floor-truncation ka bacha hua hissa aakhri entry ko — sum EXACT total
+    rahe. weight<1 (0 ya negative) clear error — "disable" ka silent clamp
+    nahi (review fix).
+    """
+    for e in entries:
+        w = int(e.get("weight", 1))
+        if w < 1:
+            raise ValueError(
+                f"{e.get('id', '?')}: weight={w} — weight kam-se-kam 1 hona "
+                f"chahiye (source disable karne ke liye config se entry "
+                f"hatao, weight 0 mat do)")
+    weights = [int(e.get("weight", 1)) for e in entries]
     tot = sum(weights)
-    return {e["id"]: int(total_bytes * w / tot) for e, w in zip(entries, weights)}
+    raw = {e["id"]: total_bytes * w / tot for e, w in zip(entries, weights)}
+    budgets = {k: int(v) for k, v in raw.items()}
+    if entries:
+        last = entries[-1]["id"]
+        budgets[last] += total_bytes - sum(budgets.values())
+    return budgets
 
 
 def _marker(stage_dir: str) -> str:
@@ -52,7 +69,10 @@ def _stage_download(entry: dict, budget: int, stage_root: str,
         if not local_input:
             raise SystemExit(f"{src.id}: local source needs --input DIR")
         # materialize into stage_dir (HF ki tarah) taaki downstream stages
-        # (tokenizer/pack) hamesha stage tree hi padhein
+        # (tokenizer/pack) hamesha stage tree hi padhein. Fresh copy — warna
+        # badla hua --input overlay ho jata aur deleted files bane rehte (fix)
+        shutil.rmtree(stage_dir, ignore_errors=True)
+        os.makedirs(stage_dir, exist_ok=True)
         shutil.copytree(local_input, stage_dir, dirs_exist_ok=True)
         root = stage_dir
     else:
@@ -84,8 +104,22 @@ def build(args) -> dict:
         summary["sources"][e["id"]] = _stage_download(
             e, cap, stage_root, getattr(args, "input", None))
     summary["total_bytes"] = sum(v["bytes"] for v in summary["sources"].values())
+    # config fingerprint — same inputs par rerun me file nahi chhooti
+    # (idempotent), alag inputs par stale summary doobar likhi jaati hai (fix)
+    summary["config"] = {
+        "total_gb": getattr(args, "total_gb", 2.4),
+        "per_source_bytes": int(getattr(args, "per_source_bytes", 0) or 0),
+        "input": getattr(args, "input", None),
+        "config_file": getattr(args, "config", None)}
     summary_path = os.path.join(args.out, "_SUMMARY.json")
-    if not os.path.exists(summary_path):           # idempotent: ek hi baar likho
+    needs_write = True
+    if os.path.exists(summary_path):
+        try:
+            old = json.load(open(summary_path, encoding="utf-8"))
+            needs_write = old.get("config") != summary["config"]
+        except (json.JSONDecodeError, OSError):
+            needs_write = True                     # corrupt thi — overwrite
+    if needs_write:
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
     return summary

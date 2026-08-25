@@ -1012,6 +1012,12 @@ Update `notebooks/ryth_kaggle_train.ipynb` cells (keep existing structure/style;
 1. **Markdown header cell**: "W1 production flow — CPU prep (Section A) → GPU train (Section B)". Note Kaggle: enable GPU+Internet for Section B; Section A runs on CPU session.
 2. **Cell A1** (code):
 
+> ⚠ **POST-IMPLEMENTATION CORRECTION (2026-08-25 review):** is block me
+> `WORK = "/kaggle/work"` likha tha — GALAT. Kaggle sirf `/kaggle/working`
+> Save Version me persist karta hai. Implemented notebook ab
+> `WORK = "/kaggle/working/prep"` use karta hai; neeche wala original text
+> historical hai, use copy mat karo.
+
 ```python
 # A1 — W1 prep (CPU session): corpus -> tokenizer -> RDS
 WORK = "/kaggle/work"          # Kaggle persistent working dir

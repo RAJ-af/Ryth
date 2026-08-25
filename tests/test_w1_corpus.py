@@ -258,3 +258,173 @@ def test_notebook_is_valid_json_with_w1_cells():
     for needle in ("w1_build_corpus.py", "w1_train_tokenizer.py",
                    "w1_pack_rds.py", "kaggle_train.py"):
         assert needle in src, f"notebook missing {needle}"
+
+
+# ---- W1 review-fix regressions (2026-08-25 independent review) -----------
+
+
+def test_merge_manifests_rejects_mismatched_config(tmp_path):
+    # part manifests me config alag ho toh SILENT merge nahi — loud fail (review #3)
+    from w1_pack_rds import merge_manifests
+
+    p1 = _mini_rds_part(tmp_path, "a")
+    p2 = _mini_rds_part(tmp_path, "b")
+    mf_path = os.path.join(p2, "manifest.json")
+    mf = json.load(open(mf_path, encoding="utf-8"))
+    mf["seq_len"] = 999                                    # part-0 se alag
+    with open(mf_path, "w", encoding="utf-8") as f:
+        json.dump(mf, f)
+    try:
+        merge_manifests([p1, p2], str(tmp_path / "merged"), extra_meta={})
+        raise AssertionError("expected SystemExit on mismatched config")
+    except SystemExit as e:
+        assert "seq_len" in str(e)
+
+
+def test_merged_manifest_carries_seq_len_override(tmp_path):
+    from w1_pack_rds import merge_manifests
+
+    p1 = _mini_rds_part(tmp_path, "a")
+    p2 = _mini_rds_part(tmp_path, "b")
+    out = str(tmp_path / "m2")
+    merge_manifests([p1, p2], out, extra_meta={"seq_len": 1024})
+    back = json.load(open(os.path.join(out, "manifest.json"), encoding="utf-8"))
+    assert back["seq_len"] == 1024                         # RDSDataset isi se padhta hai
+
+
+def test_stage_repos_repairs_dangling_symlink(tmp_path):
+    # crash ke baad bacha dangling link → FileExistsError nahi, repair (review #4)
+    import w1_pack_rds as pr
+
+    repo = tmp_path / "repo_a"
+    repo.mkdir()
+    (repo / "m.py").write_text("x=1\n", encoding="utf-8")
+    part_in = tmp_path / "in_00"
+    part_in.mkdir()
+    dst = part_in / "repo_a"
+    os.symlink(str(tmp_path / "gone"), str(dst))           # dangling
+    pr._stage_repos([str(repo)], str(part_in))
+    assert os.path.realpath(dst) == os.path.realpath(str(repo))
+
+
+def test_stage_repos_falls_back_to_copytree(tmp_path, monkeypatch):
+    import w1_pack_rds as pr
+
+    repo = tmp_path / "repo_b"
+    repo.mkdir()
+    (repo / "m.c").write_text("int x;\n", encoding="utf-8")
+    part_in = tmp_path / "in_01"
+    part_in.mkdir()
+
+    def no_symlink(*a, **k):                               # FS symlink support nahi
+        raise OSError("symlink unsupported")
+
+    monkeypatch.setattr(os, "symlink", no_symlink)
+    pr._stage_repos([str(repo)], str(part_in))
+    assert (part_in / "repo_b" / "m.c").exists()           # real copy hui
+
+
+def test_dirty_part_out_wiped_before_rerun(tmp_path):
+    # crash mid-part ke baad stale shards resume ko corrupt na karein (review #5)
+    import w1_pack_rds as pr
+
+    part_out = tmp_path / "part_00"
+    part_out.mkdir()
+    (part_out / "stale_shard_099.rds").write_bytes(b"junk")
+    assert pr._wipe_if_dirty(str(part_out)) is True
+    assert not part_out.exists()                           # wipe ho gaya
+    part_out.mkdir()
+    (part_out / "_DONE").write_text("{}")
+    assert pr._wipe_if_dirty(str(part_out)) is False       # DONE wala untouched
+
+
+def test_stratified_sample_is_walk_order_independent(tmp_path, monkeypatch):
+    # same seed + same files ⇒ same sample, chahe os.walk ka order kuch bhi ho (review #6)
+    import w1_train_tokenizer as wt
+
+    for i in range(6):
+        # unique content — warna order-independent result trivially pass ho jata
+        (tmp_path / f"f{i}.py").write_text(f"def f{i}(): pass\n" * 10,
+                                           encoding="utf-8")
+    real_walk = os.walk
+
+    def reversed_walk(root, **kw):
+        for dp, dn, fn in real_walk(root):
+            yield dp, dn, list(reversed(fn))               # ulta order
+
+    monkeypatch.setattr(wt.os, "walk", reversed_walk)
+    t_rev = wt.stratified_sample(str(tmp_path), 10 ** 9, seed=7)
+    monkeypatch.undo()
+    t_fwd = wt.stratified_sample(str(tmp_path), 10 ** 9, seed=7)
+    assert t_rev == t_fwd                                  # reproducible sample
+
+
+def test_stratified_sample_skips_marker_files(tmp_path):
+    from w1_train_tokenizer import stratified_sample
+
+    (tmp_path / "a.py").write_text("def f(): pass\n" * 5, encoding="utf-8")
+    (tmp_path / "_DONE").write_text('{"files": 999999}', encoding="utf-8")
+    (tmp_path / "_SUMMARY.json").write_text('{"total": 1}', encoding="utf-8")
+    texts = stratified_sample(str(tmp_path), 10 ** 6, seed=0)
+    assert len(texts) == 1 and "999999" not in texts[0]    # markers sample me nahi
+
+
+def test_discover_repo_dirs_ignores_marker_only_dirs(tmp_path):
+    from w1_pack_rds import _discover_repo_dirs
+
+    real = tmp_path / "real_repo"
+    real.mkdir()
+    (real / "m.py").write_text("x=1\n", encoding="utf-8")
+    ghost = tmp_path / "ghost_repo"
+    ghost.mkdir()
+    (ghost / "_DONE").write_text("{}", encoding="utf-8")
+    names = [os.path.basename(g) for g in _discover_repo_dirs(str(tmp_path))]
+    assert "real_repo" in names and "ghost_repo" not in names
+
+
+def test_plan_budget_sums_exactly_and_rejects_bad_weight():
+    from w1_build_corpus import plan_budget
+
+    entries = [{"id": "a", "weight": 1}, {"id": "b", "weight": 1},
+               {"id": "c", "weight": 1}]
+    budgets = plan_budget(entries, total_bytes=1000)
+    assert sum(budgets.values()) == 1000                   # remainder last ko gaya
+    assert budgets == {"a": 333, "b": 333, "c": 334}
+    try:
+        plan_budget([{"id": "z", "weight": 0}], 100)
+        raise AssertionError("expected rejection for weight<1")
+    except ValueError:
+        pass
+
+
+def test_summary_rewritten_when_config_changes(tmp_path):
+    # --per-source-bytes badla par purani _SUMMARY.json stale nahi reh sakti (review #10)
+    from w1_build_corpus import build
+
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "m.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    out = tmp_path / "out"
+    kw = dict(config=None, input=str(inp), out=str(out), total_gb=0.000001,
+              seed=7)
+    build(types.SimpleNamespace(per_source_bytes=400, **kw))
+    build(types.SimpleNamespace(per_source_bytes=200, **kw))
+    back = json.load(open(out / "_SUMMARY.json", encoding="utf-8"))
+    assert back["config"]["per_source_bytes"] == 200       # fingerprint fresh hai
+
+
+def test_kaggle_train_smoke_overrides_eff_tokens():
+    # smoke override ke BAAD eff_tokens dobara compute hona chahiye (review #7)
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "kaggle_train3", os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "scripts", "kaggle_train.py"))
+    kt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(kt)
+    ns = kt.build_parser().parse_args([])
+    kt.resolve_args(ns)                                    # production 262144
+    kt.apply_smoke(ns)
+    assert ns.micro_batch == 8 and ns.grad_accum == 2 and ns.seq_len == 128
+    assert ns.eff_tokens == 8 * 2 * 128                    # 2048, stale 262144 NAHI
