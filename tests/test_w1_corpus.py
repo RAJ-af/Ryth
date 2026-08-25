@@ -213,3 +213,37 @@ def test_merged_dir_loadable_by_rdsdataset(tmp_path):
     mm = merge_manifests([p1, p2], out, extra_meta={})
     ds = RDSDataset(out)
     assert len(ds) == sum(s.get("chunks", 0) for s in mm["shards"])
+
+
+def test_kaggle_train_defaults_are_production():
+    # argparse defaults inspect karo (model banana mehenga hai — sirf parser)
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "kaggle_train", os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "scripts", "kaggle_train.py"))
+    kt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(kt)                            # main defined only
+    ns = kt.build_parser().parse_args([])
+    kt.resolve_args(ns)
+    assert ns.vocab == 24576 and ns.seq_len == 1024
+    assert ns.lr == 6e-4 and ns.warmup == 2000
+    assert ns.micro_batch == 16 and ns.grad_accum == 16 and ns.steps == 8000
+    assert ns.dtype is None                                # auto; notebook fp16 deta hai
+    assert ns.eff_tokens == 16 * 16 * 1024                 # 262144 tokens/step
+
+
+def test_kaggle_train_resolve_overrides_eff_tokens():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "kaggle_train2", os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "scripts", "kaggle_train.py"))
+    kt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(kt)
+    ns = kt.build_parser().parse_args(
+        ["--micro_batch", "4", "--grad_accum", "2"])
+    kt.resolve_args(ns)
+    assert ns.eff_tokens == 4 * 2 * ns.seq_len             # override ke saath sahi

@@ -188,23 +188,26 @@ def generate_sample(ckpt_path: str, tok, preset: str, seq_len: int,
 # ─────────────────────────────────────────────────────────────────────────────
 # Orchestration
 # ─────────────────────────────────────────────────────────────────────────────
-def main(argv=None):
+def build_parser() -> argparse.ArgumentParser:
+    """CLI surface — W1 production defaults (spec §4); --smoke overrides in main."""
     p = argparse.ArgumentParser(description="Ryth end-to-end Kaggle trainer")
     p.add_argument("--work", default=os.environ.get("RYTH_WORK", _default_work()),
                    help="working dir for corpus/tokenizer/rds/checkpoints")
     p.add_argument("--raw", default=None,
                    help="folder of real code (default: build a synthetic corpus)")
     p.add_argument("--preset", default="ryth_30m")
-    p.add_argument("--vocab", type=int, default=2000)
-    p.add_argument("--seq_len", type=int, default=128)
-    p.add_argument("--micro_batch", type=int, default=8)
-    p.add_argument("--grad_accum", type=int, default=2)
-    p.add_argument("--steps", type=int, default=60)
-    p.add_argument("--warmup", type=int, default=10)
-    p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--vocab", type=int, default=24576)
+    p.add_argument("--seq_len", type=int, default=1024)
+    p.add_argument("--micro_batch", type=int, default=16)
+    p.add_argument("--grad_accum", type=int, default=16)
+    p.add_argument("--steps", type=int, default=8000)
+    p.add_argument("--warmup", type=int, default=2000)
+    p.add_argument("--lr", type=float, default=6e-4)
     p.add_argument("--dtype", default=None, help="force bf16|fp16|fp32 (else auto)")
     p.add_argument("--grad_ckpt", action="store_true")
     p.add_argument("--num_workers", type=int, default=2)
+    p.add_argument("--val_raw", default=None,
+                   help="held-out code folder -> separate RDS for validation loss")
     p.add_argument("--smoke", action="store_true",
                    help="tiny fast config that exercises the whole pipeline")
     p.add_argument("--resume_demo", action="store_true",
@@ -212,7 +215,17 @@ def main(argv=None):
     p.add_argument("--rebuild", action="store_true",
                    help="rebuild tokenizer + RDS even if cached")
     p.add_argument("--prompt", default="def add(a, b):\n")
-    args = p.parse_args(argv)
+    return p
+
+
+def resolve_args(a):
+    """Derived flags — effective batch tokens/step (spec §4 ≈260k)."""
+    a.eff_tokens = a.micro_batch * a.grad_accum * a.seq_len
+    return a
+
+
+def main(argv=None):
+    args = resolve_args(build_parser().parse_args(argv))
 
     if args.smoke:
         args.vocab, args.seq_len = 2000, 128
@@ -230,6 +243,7 @@ def main(argv=None):
     os.makedirs(work, exist_ok=True)
 
     device, dtype = pick_device_dtype(args.dtype)
+    print(f"[batch] effective tokens/step = {args.eff_tokens:,}")
 
     # 1) corpus (synthetic unless --raw given)
     if args.raw is None:
@@ -250,12 +264,20 @@ def main(argv=None):
             f"{args.micro_batch}; DataLoader drop_last would starve the loop. "
             f"Lower --micro_batch or add more/ bigger corpus.")
 
+    # 3b) optional held-out validation split (separate small RDS)
+    val_rds_dir = None
+    if args.val_raw:
+        val_rds_dir = os.path.join(work, "rds_val")
+        build_or_load_rds(tok, args.val_raw, val_rds_dir, args.seq_len,
+                          args.rebuild)
+
     # 4) model (30M preset), instantiated once and handed to the trainer
     model, _ = build_model(args.preset, tok.vocab_size, args.seq_len, args.grad_ckpt)
 
     # 5) train (smoke)
     cfg = TrainConfig(
-        data_dir=rds_dir, model_preset=args.preset, seq_len=args.seq_len,
+        data_dir=rds_dir, val_data_dir=val_rds_dir,
+        model_preset=args.preset, seq_len=args.seq_len,
         lr=args.lr, warmup_steps=args.warmup, max_steps=args.steps,
         micro_batch_size=args.micro_batch, grad_accum_steps=args.grad_accum,
         dtype=dtype, grad_checkpointing=args.grad_ckpt,
@@ -275,7 +297,8 @@ def main(argv=None):
     # 7) resume + continue
     if args.resume_demo:
         cfg2 = TrainConfig(
-            data_dir=rds_dir, model_preset=args.preset, seq_len=args.seq_len,
+            data_dir=rds_dir, val_data_dir=val_rds_dir,
+            model_preset=args.preset, seq_len=args.seq_len,
             lr=args.lr, warmup_steps=args.warmup, max_steps=args.steps + 20,
             micro_batch_size=args.micro_batch, grad_accum_steps=args.grad_accum,
             dtype=dtype, grad_checkpointing=args.grad_ckpt,
