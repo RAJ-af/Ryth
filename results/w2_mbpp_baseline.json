@@ -1,0 +1,216 @@
+{
+  "meta": {
+    "task": "mbpp",
+    "mode": "base",
+    "n_samples": 1,
+    "temperature": 0.8,
+    "top_k": 40,
+    "max_new_tokens": 32,
+    "seed": 1234
+  },
+  "tasks": [
+    {
+      "task_id": "601",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "602",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "603",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "604",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "605",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "606",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "607",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "608",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "609",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "610",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "611",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "612",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "613",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "614",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "615",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "616",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "617",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "618",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "619",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "620",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "621",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "622",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "623",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "624",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "625",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "626",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "627",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "628",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "629",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "630",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "631",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "632",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "633",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "634",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "635",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "636",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "637",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "638",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "639",
+      "n": 1,
+      "n_passed": 0
+    },
+    {
+      "task_id": "640",
+      "n": 1,
+      "n_passed": 0
+    }
+  ],
+  "pass_at_k": {
+    "pass@1": 0.0
+  }
+}

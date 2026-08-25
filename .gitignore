@@ -66,3 +66,6 @@ secrets.local.*
 # Model checkpoints
 *.pt
 *.pth
+
+# regenerable held-out text (scripts/w2_baselines.py) — baseline JSONs committed hote hain, ye nahi
+results/val_python.txt
