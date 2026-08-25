@@ -63,3 +63,81 @@ def test_validate_example_flags_structure():
     assert validate_example({"task": "t"}) != []              # missing keys
     bad_roles = dict(good, messages=[{"role": "user", "content": "q"}])
     assert any("role" in r for r in validate_example(bad_roles))
+
+
+# --------------------------------------------------------------------- #
+# teacher — OpenAI-compatible client (fake transport, no network)
+# --------------------------------------------------------------------- #
+
+from sft.teacher import (FakeTeacher, OpenAICompatTeacher, TeacherConfigError,
+                         TeacherError)
+
+
+def _transport_200(content='{"choices":[{"message":{"content":"hi"}}]}'):
+    calls = []
+
+    def t(url, payload, headers):
+        calls.append((url, payload, headers))
+        return 200, content
+    t.calls = calls
+    return t
+
+
+def test_openai_compat_parses_choice_and_auth_header():
+    t = _transport_200()
+    teacher = OpenAICompatTeacher(api_key="sk-test", model="m-1", transport=t,
+                                  sleep=lambda s: None)
+    out = teacher.complete("sys", "usr", max_tokens=32)
+    assert out == "hi"
+    url, payload, headers = t.calls[0]
+    assert url.endswith("/chat/completions")
+    assert headers["Authorization"] == "Bearer sk-test"
+    assert payload["messages"][0] == {"role": "system", "content": "sys"}
+    assert payload["max_tokens"] == 32
+
+
+def test_openai_compat_retries_on_429_then_succeeds(monkeypatch):
+    bodies = [(429, "rate limited"), (500, "boom"), (200, '{"choices":'
+              '[{"message":{"content":"ok"}}]}')]
+    sleeps = []
+
+    def flaky(url, payload, headers):
+        return bodies.pop(0)
+
+    monkeypatch.setenv("RYTH_TEACHER_API_KEY", "")
+    teacher = OpenAICompatTeacher(api_key="k", model="m", transport=flaky,
+                                  backoff_s=2.0, sleep=sleeps.append)
+    assert teacher.complete("s", "u") == "ok"
+    assert sleeps == [2.0, 4.0]                     # exponential backoff
+
+
+def test_openai_compat_fails_fast_on_4xx():
+    calls = []
+
+    def forbidden(url, payload, headers):
+        calls.append(url)
+        return 401, "bad key"
+    teacher = OpenAICompatTeacher(api_key="k", model="m", transport=forbidden,
+                                  sleep=lambda s: None)
+    with pytest.raises(TeacherError, match="401"):
+        teacher.complete("s", "u")
+    assert len(calls) == 1                          # 4xx par retry NAHI
+
+
+def test_missing_key_or_model_is_config_error(monkeypatch):
+    monkeypatch.delenv("RYTH_TEACHER_API_KEY", raising=False)
+    monkeypatch.delenv("RYTH_TEACHER_MODEL", raising=False)
+    t = OpenAICompatTeacher(transport=_transport_200(), sleep=lambda s: None)
+    with pytest.raises(TeacherConfigError, match="RYTH_TEACHER_API_KEY"):
+        t.complete("s", "u")
+    t2 = OpenAICompatTeacher(api_key="k", model=None, model_env=False,
+                             transport=_transport_200(), sleep=lambda s: None)
+    with pytest.raises(TeacherConfigError, match="model"):
+        t2.complete("s", "u")
+
+
+def test_fake_teacher_routes_by_fragment():
+    ft = FakeTeacher(responses={"unit tests": "assert True"},
+                     default="plain answer")
+    assert ft.complete("s", "please Write unit tests here") == "assert True"
+    assert ft.complete("s", "anything else") == "plain answer"
