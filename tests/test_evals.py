@@ -330,3 +330,34 @@ def test_evaluate_files_reads_labels(tmpdir):
         fh.write("return 1\n" * 5)
     out = evaluate_files(model, tok, {"py": f}, seq_len=8)
     assert set(out) == {"py"} and isinstance(out["py"], float)
+
+
+# --------------------------------------------------------------------- #
+# cli — ryth-eval entry point
+# --------------------------------------------------------------------- #
+
+
+def tk_path(tok):                                 # helper: tokenizer ko file me save karo
+    p = os.path.join(tempfile.mkdtemp(prefix="ryth_tok_"), "tokenizer.json")
+    tok.save(p)                                   # API verified: bpe.py:170
+    return p
+
+
+def test_cli_ppl_smoke(tmpdir):
+    from evals.cli import main
+
+    tok = _tok()
+    cfg = RythConfig(vocab_size=tok.vocab_size, max_seq_len=64,
+                     d_model=64, n_layers=2, n_heads=4, n_kv_heads=2)
+    model = RythForCausalLM(cfg)
+    ck = os.path.join(str(tmpdir), "b.pt")
+    save_checkpoint(ck, model, cfg)
+    txt = os.path.join(str(tmpdir), "t.txt")
+    with open(txt, "w", encoding="utf-8") as f:
+        f.write("def f():\n    return 1\n" * 10)
+    outj = os.path.join(str(tmpdir), "r.json")
+    rc = main(["ppl", "--ckpt", ck, "--tokenizer", tk_path(tok),
+               "--files", f"py={txt}", "--out", outj])
+    assert rc == 0
+    with open(outj, encoding="utf-8") as f:
+        assert "py" in json.load(f)["perplexity"]
