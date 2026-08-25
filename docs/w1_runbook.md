@@ -14,9 +14,12 @@ compute Kaggle par; ye doc exact click-path deta hai.
 
 1. Kaggle → New Notebook → File → Import → `notebooks/ryth_kaggle_train.ipynb`.
 2. Settings: **Accelerator = None**, **Internet = On**.
-3. Section A run karo (cells A1, A2). Har stage idempotent hai — session beech
-   me mare to bas Run All dobara; `_DONE` markers complete stages skip karte
-   hain (`corpus_out/stage/<source>/_DONE`, `rds_w1/part_*/_DONE`).
+3. **Run All** — bas. Notebook Run-All-safe hai: A1 prep karta hai, B1 wahan
+   clean-exit dega ("w1-prep attach karo") — CPU session me wo EXPECTED hai,
+   walkthrough sections khud skip hote hain (`WALKTHROUGH=False`).
+   Har stage idempotent hai — session beech me mare to bas Run All dobara;
+   `_DONE` markers complete stages skip karte hain
+   (`corpus_out/stage/<source>/_DONE`, `rds_w1/part_*/_DONE`).
 4. A1 pehle **probe** chalata hai (columns + license histogram) — isse license
    policy confirm hoti hai (allowlist ya unknown-keep; neeche Troubleshooting).
 
@@ -33,8 +36,9 @@ compute Kaggle par; ye doc exact click-path deta hai.
 
 1. Same notebook → Settings: **Accelerator = GPU T4**, Internet On.
 2. Right panel → Input → attach dataset `w1-prep` (path `/kaggle/input/w1-prep`).
-3. Section B run karo (B1, B2). B1 prepared tok/RDS ko cache paths par copy
-   karta hai — tokenizer/RDS rebuild SKIP hota hai, GPU sirf train karta hai.
+3. **Run All** — bas. A1 attached `w1-prep` dekh ke khud SKIP hota hai (poora
+   prep dobara NAHI hota); B1 tok/RDS ko cache paths par copy karke train
+   karta hai, B2 samples deta hai. Walkthrough sections phir bhi skip.
 4. **Resume:** 12h session limit ya disconnect aaye → naya session, wahi steps
    dobara. `runs/ryth-kaggle/latest.pt` se auto-resume hota hai (same WORK path:
    `/kaggle/working/run`). NOTE: `/kaggle/working` outputs bhi Save Version me
