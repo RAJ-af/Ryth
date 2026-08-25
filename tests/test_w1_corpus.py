@@ -147,3 +147,25 @@ def test_build_local_sources_idempotent(tmp_path):
     s2 = build(args)
     assert s2 == s1
     assert (out / "_SUMMARY.json").stat().st_mtime_ns == mtime
+
+
+def test_stratified_sample_roundrobins_languages(tmp_path):
+    from w1_train_tokenizer import stratified_sample
+
+    for i in range(4):
+        (tmp_path / f"m{i}.py").write_text("def f(): pass\n" * 20, encoding="utf-8")
+        (tmp_path / f"k{i}.c").write_text("int main(){}\n" * 20, encoding="utf-8")
+    texts = stratified_sample(str(tmp_path), target_chars=100000, seed=1)
+    py = sum(1 for t in texts if t.lstrip().startswith("def "))
+    c = len(texts) - py
+    assert py == 4 and c == 4                              # dono languages poori
+
+
+def test_time_probe_returns_positive_rate(tmp_path):
+    from w1_train_tokenizer import stratified_sample, time_probe
+    from tokenizer.bpe import BPETokenizer
+
+    (tmp_path / "a.py").write_text("x = 1\n" * 5000, encoding="utf-8")
+    texts = stratified_sample(str(tmp_path), target_chars=10 ** 9, seed=0)
+    rate = time_probe(texts[:1], tok=BPETokenizer())
+    assert rate > 0
