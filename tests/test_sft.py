@@ -231,3 +231,46 @@ def test_test_gen_validator_runs_asserts_locally():
     assert probs and "fail" in probs[0]
     assert i2c.validate("def add_two(a, b):\n    return a + b") == []
     assert i2c.validate("def broken(:\n")
+
+
+# --------------------------------------------------------------------- #
+# filter — rule gate + dedup + self-verify
+# --------------------------------------------------------------------- #
+
+from sft.filter import Deduper, FilterConfig, rule_check, self_verify
+
+
+def _bare_seed(**kw):
+    d = dict(id="s", task="t", language="python",
+             user_prompt="x" * 50, teacher_directive="")
+    d.update(kw)
+    return Seed(**d)
+
+
+def test_rule_check_clean_seed_passes():
+    s = _bare_seed(check=lambda t: [])
+    assert rule_check(s, "y" * 30) == []
+    assert rule_check(s, "y" * 30, FilterConfig(min_assistant_chars=31)) != []
+
+
+def test_rule_check_reports_each_failure():
+    s = _bare_seed(user_prompt="short", check=lambda t: ["task-specific bad"])
+    reasons = rule_check(s, "", FilterConfig())
+    joined = "; ".join(reasons)
+    assert "task-specific bad" in joined
+    assert "chars" in joined                        # length rules bhi
+
+
+def test_deduper_first_wins_normalized():
+    d = Deduper()
+    assert not d.duplicate("def f():\n    return 1")
+    assert d.duplicate("DEF   F():\n RETURN 1")     # case+whitespace normalized
+    assert not d.duplicate("totally other code")
+
+
+def test_self_verify_yes_passes_no_fails():
+    s = _bare_seed()
+    yes = FakeTeacher(responses={}, default="yes")
+    no = FakeTeacher(responses={}, default="no")
+    assert self_verify(s, "answer text", yes) == []
+    assert self_verify(s, "answer text", no) == ["self_verify said: no"]
