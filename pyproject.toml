@@ -45,6 +45,7 @@ ryth-rde = "dataset.cli:main"
 ryth-train = "training.cli:main"
 ryth-corpus = "corpus.cli:main"
 ryth-eval = "evals.cli:main"
+ryth-sft = "sft.cli:main"
 
 [tool.setuptools]
 packages = [
@@ -52,6 +53,7 @@ packages = [
     "corpus", "corpus.metadata", "corpus.licenses", "corpus.sources",
     "corpus.download", "corpus.cleaners", "corpus.filters", "corpus.dedup",
     "corpus.quality", "corpus.split", "corpus.tasks", "corpus.exporters",
+    "sft", "sft.tasks",
 ]
 
 [tool.pytest.ini_options]

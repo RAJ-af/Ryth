@@ -338,3 +338,45 @@ def test_package_rows_render_without_tokenizer():
     rows = package(es, tok=None)
     assert len(rows) == 1 and "<|system|>" in rows[0]["text"]
     assert validate_example(rows[0]) == []
+
+
+# --------------------------------------------------------------------- #
+# cli — ryth-sft generate (dry-run = offline wiring proof)
+# --------------------------------------------------------------------- #
+
+
+def test_cli_dry_run_end_to_end(tmp_path):
+    from sft.cli import main
+
+    src = tmp_path / "mini_corpus"; src.mkdir()
+    (src / "math.py").write_text(_FUNC_SRC, encoding="utf-8")
+    (src / "notes.txt").write_text("non-code, ignore", encoding="utf-8")
+    out = tmp_path / "sft" / "v1.jsonl"
+
+    rc = main(["generate", "--src", str(src), "--out", str(out),
+               "--dry-run"])
+    assert rc == 0
+    rows = read_jsonl(str(out))
+    assert rows and all(validate_example(r) == [] for r in rows)
+    assert {r["task"] for r in rows} <= {
+        "instruction_to_code", "bug_fix", "docstring_to_code",
+        "explain_code", "test_gen"}
+    stats = json.loads((tmp_path / "sft" / "v1.jsonl.stats.json")
+                       .read_text(encoding="utf-8"))
+    # NOTE: >=0.90 gate REAL runs ka acceptance hai; offline canned answers me
+    # dedup-collisions/explain-length dips normal hain — sirf machinery check:
+    assert isinstance(stats["pass_rate"], float)
+    assert 0.0 <= stats["pass_rate"] <= 1.0
+    assert "token_ids" not in rows[0]               # bina --tokenizer ids nahi
+
+
+def test_cli_target_caps_rows(tmp_path):
+    from sft.cli import main
+
+    src = tmp_path / "mc"; src.mkdir()
+    (src / "math.py").write_text(_FUNC_SRC, encoding="utf-8")
+    out = tmp_path / "o.jsonl"
+    rc = main(["generate", "--src", str(src), "--out", str(out),
+               "--dry-run", "--target", "2"])
+    assert rc == 0
+    assert len(read_jsonl(str(out))) <= 2
