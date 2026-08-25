@@ -43,5 +43,11 @@ def directive_for(task: str) -> str:
 
 
 def teacher_user(user_prompt: str, task: str) -> str:
-    """Stored-turn + directive — SIRF teacher.complete() me jaata hai."""
+    """Stored-turn + directive — SIRF teacher.complete() me jaata hai.
+
+    NOTE: corpus-derived prompt me agar khud koi '\n\n[' pattern ho (rare —
+    blank line ke baad bracket-line) to teacher use directive samajh sakta
+    hai; harmless confusion hai, STORED turns par asar nahi kyunki
+    directive append yahin hota hai aur stored turn s.user_prompt hi rehta.
+    """
     return f"{user_prompt}\n\n[{directive_for(task)}]"

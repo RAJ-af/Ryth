@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import types
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -261,11 +262,75 @@ def test_rule_check_reports_each_failure():
     assert "chars" in joined                        # length rules bhi
 
 
-def test_deduper_first_wins_normalized():
+def test_deduper_first_wins_whitespace_normalized():
+    # CODE dedup CASE-PRESERVING hai (W3 review fix): `Add` vs `add` alag
+    # identifiers hain — lower() unhe galti se merge kar deta tha
     d = Deduper()
     assert not d.duplicate("def f():\n    return 1")
-    assert d.duplicate("DEF   F():\n RETURN 1")     # case+whitespace normalized
+    assert d.duplicate("def    f():\n    return    1")     # sirf ws farq = DUP
     assert not d.duplicate("totally other code")
+
+    d2 = Deduper()
+    assert not d2.duplicate("def Add(x):\n    return x")
+    assert not d2.duplicate("def add(x):\n    return x")   # case alag = DISTINCT
+
+
+def test_generate_config_error_is_loud():
+    # missing key jaisi SETUP galti chupchaap empty-dataset nahi ban sakti
+    from sft.teacher import TeacherConfigError
+
+    class NoKeyTeacher:
+        def complete(self, *a, **k):
+            raise TeacherConfigError("teacher API key nahi mili")
+
+    with pytest.raises(TeacherConfigError):
+        generate(build_seeds([_rec()]), NoKeyTeacher(),
+                 progress=lambda *a, **k: None)
+
+
+def test_cli_partial_output_survives_crash(tmp_path, monkeypatch):
+    # run beech hard-crash bhi ho jaye to likhe gaye rows + stats bach jaate hain
+    import sft.teacher as T
+    from sft.cli import main
+
+    class HalfTeacher(FakeTeacher):
+        def complete(self, system, user, **kw):
+            if len(self.calls) >= 2:
+                raise RuntimeError("network died mid-run")
+            return super().complete(system, user, **kw)
+
+    monkeypatch.setattr(T, "FakeTeacher", HalfTeacher)
+    src = tmp_path / "mc"
+    src.mkdir()
+    (src / "math.py").write_text(_FUNC_SRC, encoding="utf-8")
+    out = tmp_path / "o.jsonl"
+    try:
+        main(["generate", "--src", str(src), "--out", str(out), "--dry-run"])
+        raise AssertionError("expected crash to propagate")
+    except RuntimeError:
+        pass
+    assert out.exists()
+    written = read_jsonl(str(out))
+    assert len(written) >= 1                        # jo mila wo bach gaya
+    stats = json.loads(
+        Path(str(out) + ".stats.json").read_text(encoding="utf-8"))
+    assert stats.get("crashed") is True
+    assert stats["n_written"] == len(written)
+
+
+def test_cli_teacher_config_error_is_clean(tmp_path, monkeypatch):
+    # bina key ke real run -> traceback nahi, seedha setup-hint exit
+    from sft.cli import main
+
+    monkeypatch.delenv("RYTH_TEACHER_API_KEY", raising=False)
+    monkeypatch.delenv("RYTH_TEACHER_MODEL", raising=False)
+    src = tmp_path / "mc2"
+    src.mkdir()
+    (src / "m.py").write_text(_FUNC_SRC, encoding="utf-8")
+    with pytest.raises(SystemExit) as ei:
+        main(["generate", "--src", str(src), "--out",
+              str(tmp_path / "x.jsonl")])
+    assert "RYTH_TEACHER_API_KEY" in str(ei.value)
 
 
 def test_self_verify_yes_passes_no_fails():
@@ -328,6 +393,52 @@ def test_generate_dedup_collapses_identical_answers():
                                  progress=lambda *a, **k: None)
     assert stats2["n_passed"] <= stats["n_passed"]
     assert any("duplicate" in r for r in stats2["filter_reasons"])
+
+
+def test_generate_stops_when_target_passed_reached():
+    # target_passed: jitne PASS ho utne par teacher calls BAND — real API run
+    # me ye owner ke paise bachata hai (poore seed-pool ki zaroorat nahi)
+    seeds = build_seeds([_rec()])
+    teacher = FakeTeacher(responses=_good_responses(), default="junk")
+    examples, stats = generate(seeds, teacher, target_passed=1,
+                               progress=lambda *a, **k: None)
+    assert len(examples) == 1
+    assert stats["n_generated"] == 1               # pehli pass par hi rukna tha
+
+
+def test_generate_teacher_error_is_recorded_not_fatal():
+    # ek seed ka teacher-call fail => reason record, run aage (W3 review fix)
+    from sft.teacher import TeacherError
+
+    class BoomTeacher:
+        def complete(self, *a, **k):
+            raise TeacherError("HTTP 503: overloaded")
+
+    seeds = build_seeds([_rec()])
+    examples, stats = generate(seeds, BoomTeacher(),
+                               progress=lambda *a, **k: None)
+    assert examples == []
+    assert stats["filter_reasons"].get("teacher_error") == len(seeds)
+    assert stats["pass_rate"] == 0.0
+
+
+def test_self_verify_teacher_error_not_fatal():
+    # verify-pass ka fail bhi poora run nahi girana chahiye
+    from sft.filter import FilterConfig
+    from sft.teacher import TeacherError
+
+    class OkThenBoom:
+        def complete(self, system, user, **kw):
+            if "strict code reviewer" in system:
+                raise TeacherError("HTTP 429 rate-limited forever")
+            return 'def solved(x):\n    """Done."""\n    return x\n'
+
+    seeds = build_seeds([_rec()], tasks=["instruction_to_code"])
+    assert seeds, "fixture se i2c seeds milne chahiye"
+    examples, stats = generate(seeds, OkThenBoom(), verify_teacher=OkThenBoom(),
+                               progress=lambda *a, **k: None)
+    assert examples == []                          # verify fail = example nahi
+    assert stats["filter_reasons"].get("teacher_error", 0) >= 1
 
 
 def test_package_rows_render_without_tokenizer():

@@ -21,7 +21,12 @@ class FilterConfig:
 
 
 def normalize_for_dedup(text: str) -> str:
-    return _WS_RE.sub(" ", text).strip().lower()
+    """Whitespace-normalized dedup key — CASE-PRESERVING jaan-boojh ke.
+
+    Code me `Add` aur `add` alag identifiers hain; lower() karne par
+    legitimately alag solutions galti se merge ho jaate the (review fix).
+    """
+    return _WS_RE.sub(" ", text).strip()
 
 
 class Deduper:

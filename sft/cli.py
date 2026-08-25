@@ -21,6 +21,8 @@ import json
 import os
 from types import SimpleNamespace
 
+from sft.teacher import TeacherConfigError, TeacherError
+
 
 def _record(content: str, language: str, path: str, **extra) -> SimpleNamespace:
     """Full record duck-type (corpus builders repository/split/license mangte)."""
@@ -67,7 +69,8 @@ def main(argv=None) -> int:
                    help="corpus dir ya .jsonl rows (content/language/path)")
     g.add_argument("--out", default="data/sft_v1.jsonl")
     g.add_argument("--target", type=int, default=5000,
-                   help="final examples ki max count (spec: ~5-10k)")
+                   help="itne examples PASS hote hi generation rok do "
+                        "(spec: ~5-10k) — API spend cap")
     g.add_argument("--tasks", default="",
                    help="comma-list subset; default sab 5")
     g.add_argument("--model", default=None)
@@ -79,7 +82,7 @@ def main(argv=None) -> int:
                    help="FakeTeacher — offline wiring proof, no network")
     args = ap.parse_args(argv)
 
-    from sft.generate import build_seeds, generate, package
+    from sft.generate import build_seeds, generate
     from sft.schema import validate_example
 
     records = load_records(args.src)
@@ -89,36 +92,65 @@ def main(argv=None) -> int:
                         tasks=(args.tasks.split(",") if args.tasks else None))
     print(f"[seeds] {len(seeds)} seeds from {len(records)} records")
 
-    if args.dry_run:
-        from sft.teacher import FakeTeacher
-        teacher = FakeTeacher()
-    else:
-        from sft.teacher import OpenAICompatTeacher
-        kw = {"base_url": args.base_url} if args.base_url else {}
-        teacher = OpenAICompatTeacher(model=args.model, **kw)
-
-    examples, stats = generate(seeds, teacher, progress=lambda *a, **k: None)
-    if args.target and len(examples) > args.target:
-        examples = examples[:args.target]
+    try:
+        if args.dry_run:
+            from sft.teacher import FakeTeacher
+            teacher = FakeTeacher()
+        else:
+            from sft.teacher import OpenAICompatTeacher
+            kw = {"base_url": args.base_url} if args.base_url else {}
+            teacher = OpenAICompatTeacher(model=args.model, **kw)
+    except TeacherError as e:                          # key/model gating
+        raise SystemExit(f"[sft] {e}") from None
 
     tok = None
     if args.tokenizer:
         from dataset import load_bpe_tokenizer
         tok = load_bpe_tokenizer(args.tokenizer)
-    rows = package(examples, tok)
-    bad = [r for r in rows if validate_example(r)]
-    if bad:
-        raise SystemExit(f"internal error: {len(bad)} rows failed validation")
 
+    # incremental write: har PASS turant flush — hard crash par bhi jo mila
+    # wo + stats bach jaate hain (review fix; pehle sab end me tha)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    from sft.schema import write_jsonl
-    write_jsonl(rows, args.out)
-    stats_path = args.out + ".stats.json"
-    with open(stats_path, "w", encoding="utf-8") as f:
+    n_written = 0
+    fobj = open(args.out, "w", encoding="utf-8")
+    try:
+        def _sink(ex):
+            nonlocal n_written
+            row = ex.to_row(tok)
+            problems = validate_example(row)
+            if problems:                               # bug-guard, data nahi
+                raise SystemExit(f"internal error: invalid row {problems}")
+            fobj.write(json.dumps(row, ensure_ascii=False) + "\n")
+            fobj.flush()
+            n_written += 1
+
+        target = args.target if (args.target and args.target > 0) else None
+        _, stats = generate(seeds, teacher, target_passed=target,
+                            on_example=_sink,
+                            progress=print if args.dry_run
+                            else (lambda *a, **k: None))
+    except TeacherConfigError as e:                    # key/model gating — loud
+        fobj.close()
+        raise SystemExit(f"[sft] {e}") from None
+    except Exception as e:
+        fobj.close()
+        crash_stats = {"crashed": True, "error": f"{type(e).__name__}: {e}",
+                       "n_written": n_written}
+        with open(args.out + ".stats.json", "w", encoding="utf-8") as f:
+            json.dump(crash_stats, f, indent=2)
+        print(f"[sft] CRASH after {n_written} rows — partial output + "
+              f"stats saved ({args.out}.stats.json)")
+        raise
+    fobj.close()
+
+    stats["n_written"] = n_written
+    stats["crashed"] = False
+    with open(args.out + ".stats.json", "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2)
     print("[sft]", json.dumps({k: stats[k] for k in
                                ("n_generated", "n_passed", "pass_rate")}))
-    print(f"[out] {args.out} ({len(rows)} rows) | stats: {stats_path}")
+    print(f"[out] {args.out} ({n_written} rows) | stats: {args.out}"
+          f".stats.json")
     if not args.dry_run and stats["pass_rate"] < 0.9:
         print("[warn] pass_rate < 0.9 — spec §6 acceptance ke neeche; "
               "filter_reasons dekho")
