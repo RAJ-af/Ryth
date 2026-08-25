@@ -893,9 +893,11 @@ git commit -m "feat(w1): resumable RDS packing with manifest merge"
 - Modify: `scripts/kaggle_train.py` (CLI + wiring only; NO changes to `training/` package)
 
 **Interfaces:**
-- Consumes: existing `TrainConfig(val_data_dir=...)`, `make_dataloaders`.
+- Consumes: existing `TrainConfig(val_data_dir=...)`, `make_dataloaders`; existing flag names stay verbatim — NOTE the warmup flag is **`--warmup`** (not `--warmup_steps`) and the RDS dir is `<work>/rds_out` (kaggle_train.py:200,207).
 - Produces:
-  - New flags: `--val_raw DIR` (held-out code folder; if given, its RDS is built to `<work>/rds_val` and passed as `TrainConfig.val_data_dir`), `--eff_tokens_per_step` sanity print (micro_batch × grad_accum × seq_len), and `--vocab 24576 --seq_len 1024 --lr 6e-4 --warmup_steps 2000 --micro_batch 16 --grad_accum 16 --steps 8000 --dtype fp16` become the **non-smoke defaults** (smoke flag still overrides exactly as today).
+  - New flag: `--val_raw DIR` (held-out code folder; if given, its RDS is built to `<work>/rds_val` via `build_or_load_rds` and passed as `val_data_dir` into BOTH `TrainConfig(...)` constructions — main + resume).
+  - `resolve_args(a)` sets derived `a.eff_tokens = a.micro_batch * a.grad_accum * a.seq_len`; main prints it beside device selection.
+  - Non-smoke DEFAULTS become: `--vocab 24576 --seq_len 1024 --lr 6e-4 --warmup 2000 --micro_batch 16 --grad_accum 16 --steps 8000`. `--dtype` STAYS `None` (auto) — forcing fp16 would break CPU/local runs; the Kaggle notebook passes `--dtype fp16` explicitly on T4. Smoke overrides unchanged.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -915,8 +917,9 @@ def test_kaggle_train_defaults_are_production():
     ns = kt.build_parser().parse_args([])
     kt.resolve_args(ns)
     assert ns.vocab == 24576 and ns.seq_len == 1024
-    assert ns.lr == 6e-4 and ns.micro_batch == 16 and ns.grad_accum == 16
-    assert ns.dtype == "fp16"
+    assert ns.lr == 6e-4 and ns.warmup == 2000
+    assert ns.micro_batch == 16 and ns.grad_accum == 16 and ns.steps == 8000
+    assert ns.dtype is None                                # auto; notebook fp16 deta hai
     assert ns.eff_tokens == 16 * 16 * 1024                 # 262144 tokens/step
 ```
 
@@ -943,7 +946,7 @@ Expected: FAIL — no `build_parser` attribute.
 In `scripts/kaggle_train.py`:
 1. Move the parser construction from `main()` into `def build_parser(): ... return p` (verbatim flags, with the NEW defaults listed above; keep `--smoke` overrides in `main` untouched).
 2. After parse: `args.eff_tokens = args.micro_batch * args.grad_accum * args.seq_len` and print `[batch] effective tokens/step = ...` next to device selection.
-3. Val branch after step 3 (RDS build):
+3. Val branch right after step 3 (main RDS build) in `main()`:
 
 ```python
     val_rds_dir = None
@@ -953,7 +956,7 @@ In `scripts/kaggle_train.py`:
                           args.rebuild)
 ```
 
-and pass `val_data_dir=val_rds_dir` into the existing `TrainConfig(...)` call (field already supported by `training/dataloader.py`).
+and pass `val_data_dir=val_rds_dir` into BOTH existing `TrainConfig(...)` constructions (the main one and the `--resume_demo` one — field already supported by `training/dataloader.py`).
 4. Add `p.add_argument("--val_raw", default=None, help="held-out code folder -> separate RDS for validation")`.
 
 - [ ] **Step 4: Green + full suite**
@@ -1016,8 +1019,12 @@ WORK = "/kaggle/work"          # Kaggle persistent working dir
 !git clone https://github.com/RAJ-af/Ryth ryth && %cd ryth
 import os; os.environ["RYTH_WORK"] = WORK
 !python3 scripts/w1_probe_stack.py --subset python --limit 200
+!python3 scripts/w1_probe_stack.py --subset c --limit 200
 !python3 scripts/w1_build_corpus.py --config configs/w1_sources.json \
         --out $RYTH_WORK/corpus_out --total-gb 2.4
+# chhota held-out val split (~200 files) validation loss ke liye
+!mkdir -p $RYTH_WORK/val_src && \
+ ls $RYTH_WORK/corpus_out/stage/*/* | head -200 | xargs -I{} cp {} $RYTH_WORK/val_src/
 !python3 scripts/w1_train_tokenizer.py --raw $RYTH_WORK/corpus_out/stage \
         --vocab 24576 --sample-mb 60 --out $RYTH_WORK/tok/tokenizer.json
 !python3 scripts/w1_pack_rds.py --raw $RYTH_WORK/corpus_out/stage \
@@ -1028,8 +1035,8 @@ import os; os.environ["RYTH_WORK"] = WORK
 3. **Cell A2** (code) — save outputs as a private Kaggle Dataset (owner clicks the UI "Save Version" per runbook; cell prints instructions + sizes):
 
 ```python
-# A2 — outputs ka size dekho; phir UI se Save As Dataset (runbook §3)
-!du -sh $RYTH_WORK/corpus_out $RYTH_WORK/tok $RYTH_WORK/rds_w1
+# A2 — outputs ka size dekho; phir UI se Save As Dataset (runbook §2)
+!du -sh $RYTH_WORK/corpus_out $RYTH_WORK/tok $RYTH_WORK/rds_w1 $RYTH_WORK/val_src
 ```
 
 4. **Cell B1** (code, GPU session, dataset attached at `/kaggle/input/w1-prep`):
@@ -1039,13 +1046,18 @@ import os; os.environ["RYTH_WORK"] = WORK
 import os
 PREP = "/kaggle/input/w1-prep"      # attach A-outputs dataset here
 WORK = "/kaggle/working/run"; os.makedirs(WORK, exist_ok=True)
-!cp -r $PREP/tok $PREP/rds_w1 $WORK/ 2>/dev/null || true
-!ls $WORK
+# prepared artifacts ko wahi paths par rakho jahan kaggle_train dhundta hai:
+#   tok/tokenizer.json (build_or_load_tokenizer cache) + rds_out/manifest.json
+!mkdir -p $WORK/tok $WORK/rds_out && \
+ cp -r $PREP/tok/. $WORK/tok/ && cp -r $PREP/rds_w1/final/. $WORK/rds_out/
+!ls $WORK $WORK/rds_out | head
 !python3 scripts/kaggle_train.py --work $WORK --raw $PREP/corpus_out/stage \
     --preset ryth_30m --vocab 24576 --seq_len 1024 --lr 6e-4 \
-    --warmup_steps 2000 --micro_batch 16 --grad_accum 16 --steps 8000 \
-    --dtype fp16 --num_workers 2
+    --warmup 2000 --micro_batch 16 --grad_accum 16 --steps 8000 \
+    --dtype fp16 --num_workers 2 --val_raw $PREP/val_src
 ```
+
+(Cached `tok/` + `rds_out/` hone se tokenizer/RDS rebuild SKIP hota hai — GPU sirf training karta hai; `--raw` sirf fallback ke liye attached rehta hai.)
 
 5. **Cell B2** (code) — quick ppl sanity + generation samples (C + Python prompts) using `evals.ppl` and `evals.generation.sample_completion` on `best.pt`; prints results JSON path.
 
