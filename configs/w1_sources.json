@@ -1,0 +1,10 @@
+[
+  {"id": "hf:stack-py", "kind": "huggingface",
+   "location": "bigcode/the-stack-dedup", "languages": ["python"],
+   "category": "code", "subpath": "data/python",
+   "license_hint": "MIT/Apache/BSD/ISC/MPL-2.0-or-unknown"},
+  {"id": "hf:stack-c", "kind": "huggingface",
+   "location": "bigcode/the-stack-dedup", "languages": ["c"],
+   "category": "code", "subpath": "data/c",
+   "license_hint": "MIT/Apache/BSD/ISC/MPL-2.0-or-unknown"}
+]

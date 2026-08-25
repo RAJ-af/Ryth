@@ -11,6 +11,8 @@ import sys
 import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "scripts"))
 
 
 class _FakeDS:
@@ -85,3 +87,35 @@ def test_hf_unlimited_when_no_budget(tmp_path):
     dl = HuggingFaceDownloader(max_examples=5)
     staged = dl.fetch(src, str(tmp_path))
     assert len(os.listdir(staged.root)) == 5               # purana behaviour intact
+
+
+def test_w1_probe_counts_license_histogram():
+    from w1_probe_stack import w1_probe_stack
+
+    _install_fake_datasets([
+        {"content": "a", "lang": "c", "license": "mit"},
+        {"content": "b", "lang": "c", "license": "mit"},
+        {"content": "c", "lang": "c", "license": None},
+        {"content": "d", "lang": "c"},                     # license column hi nahi
+    ])
+    out = w1_probe_stack("c", limit=10)
+    assert out["rows"] == 4
+    assert "license" in out["columns"]
+    assert out["license_histogram"] == {"mit": 2, "unknown": 2}
+
+
+def test_w1_sources_json_valid_against_registry():
+    from corpus.sources.registry import Source
+
+    cfg = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "configs", "w1_sources.json")
+    entries = json.load(open(cfg, encoding="utf-8"))
+    assert isinstance(entries, list) and len(entries) >= 2
+    ids = set()
+    for e in entries:
+        s = Source(**e)                                    # schema validate ho gaya
+        assert s.enabled and s.kind in ("huggingface", "github")
+        ids.add(s.id)
+    assert any(e["subpath"] == "data/python" for e in entries)
+    assert any(e["subpath"] == "data/c" for e in entries)
+    assert len(ids) == len(entries)                        # unique ids
