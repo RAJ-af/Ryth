@@ -13,6 +13,7 @@ refs/convert/parquet (ungated, verified anonymous streaming).
 from __future__ import annotations
 
 import os
+import sys
 
 from .base import Downloader, DownloadError, StagedRepo
 
@@ -30,6 +31,25 @@ _GATE_MARKERS = ("gated", "authentication", "401", "403")
 def _is_gate_error(e: Exception) -> bool:
     s = f"{type(e).__name__}: {e}".lower()
     return any(m in s for m in _GATE_MARKERS)
+
+
+def teardown_safe_exit(status: int = 0) -> None:
+    """CLI-only clean exit — pyarrow/HF-streaming teardown-abort ke liye.
+
+    HF streaming iterators background threads chhodte hain; interpreter-
+    shutdown par wo kabhi-kabhi `terminate called without an active
+    exception` (SIGABRT, rc=134) dete hain — KAAM poora hone ke BAAD bhi
+    (Kaggle C-probe, 2026-08-25: JSON print ho chuka tha phir bhi abort).
+    Isliye CLI mains apna output flush karke yahan se hard-exit karte
+    hain (atexit/pyarrow-teardown skip — hum koi atexit cleanup rely nahi
+    karte). Library code me use MAT karo.
+    """
+    import gc
+
+    gc.collect()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(status)
 
 
 def open_streaming(entry: dict, split: str = "train"):

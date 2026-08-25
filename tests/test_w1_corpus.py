@@ -570,13 +570,15 @@ def test_entry_scripts_bootstrap_repo_root():
         assert "_REPO not in sys.path" in src, f"{name}: bootstrap missing"
 
 
-def test_probe_runs_as_fresh_clone_subprocess(tmp_path):
-    # EXACT Kaggle invocation simulate: `python3 <clone>/scripts/w1_probe_stack.py`
-    # -S = site/editable-hooks OFF (dev-machine par installed ryth bug chhupa
-    # deta tha), PYTHONPATH khali, cwd bahaar. Provenance sentinel prove karta
-    # hai ki `corpus` CLONE se aaya, installed package se nahi.
+def _fresh_clone_probe_harness(tmp_path):
+    """Minimal fresh-clone + fake-datasets setup; (child_code, env) returns.
+
+    EXACT Kaggle invocation simulate: `python3 <clone>/scripts/w1_probe_stack.py`
+    -S = site/editable-hooks OFF (dev-machine par installed ryth bug chhupa
+    deta tha), PYTHONPATH khali, cwd bahaar. Provenance sentinel prove karta
+    hai ki `corpus` CLONE se aaya, installed package se nahi.
+    """
     import shutil
-    import subprocess
 
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -619,6 +621,13 @@ def test_probe_runs_as_fresh_clone_subprocess(tmp_path):
         f"runpy.run_path({probe!r}, run_name='__main__')\n")
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    return child_code, env
+
+
+def test_probe_runs_as_fresh_clone_subprocess(tmp_path):
+    import subprocess
+
+    child_code, env = _fresh_clone_probe_harness(tmp_path)
     r = subprocess.run([sys.executable, "-S", "-c", child_code],
                        cwd=str(tmp_path), env=env, capture_output=True,
                        text=True, timeout=120)
@@ -626,5 +635,87 @@ def test_probe_runs_as_fresh_clone_subprocess(tmp_path):
         f"rc={r.returncode}\nSTDERR:\n{r.stderr[-800:]}"
     out = json.loads(r.stdout[r.stdout.index("{"):])
     assert out["rows"] == 2 and out["columns"] == ["code", "license"]
+    sentinel = tmp_path / "sentinel.txt"
     assert sentinel.exists() and "clone-import" in sentinel.read_text(), \
         "`corpus` clone se resolve NAHI hua (installed/package-hook jeet gaya)"
+
+
+# ------------------------------------------------------------------- #
+# C-probe rc=134 (SIGABRT) — HF/pyarrow streaming teardown race.
+# Lakshman-rekha: JSON print ho chuka tha uske BAAD native abort — yaani
+# kaam poora tha, crash interpreter-shutdown ke background-thread cleanup
+# me tha (rc=134 != 137 OOM; koi Python traceback nahi). datasets ka koi
+# public close API nahi -> CLI mains controlled hard-exit karte hain.
+# ------------------------------------------------------------------- #
+
+def test_teardown_safe_exit_skips_racy_interpreter_teardown(tmp_path):
+    # Miniature repro: atexit-handler wahi racy teardown simulate karta hai
+    # (marker likhta hai + os.abort => SIGABRT rc=134). Normal exit hote to
+    # yahi abort milta; teardown_safe_exit os._exit karta hai to handler
+    # KABHI nahi chalta -> rc=0, output flushed, marker absent.
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out_file = tmp_path / "out.txt"
+    crash_marker = tmp_path / "teardown-ran.txt"
+
+    def child(use_safe_exit: bool) -> str:
+        exit_line = ("teardown_safe_exit(0)" if use_safe_exit
+                     else "pass  # normal return -> atexit chalta hai")
+        return (
+            "import atexit, sys\n"
+            f"def _racy_teardown():\n"
+            f"    open({str(crash_marker)!r}, 'w').write('ran')\n"
+            "    sys.stderr.write('terminate called without an active "
+            "exception\\n')\n"
+            "    import os\n"
+            "    os.abort()\n"
+            "atexit.register(_racy_teardown)\n"
+            f"sys.path.insert(0, {repo!r})\n"
+            "from corpus.download.huggingface import teardown_safe_exit\n"
+            f"f = open({str(out_file)!r}, 'w'); "
+            "f.write('probe-json-done\\n'); f.flush()\n"
+            f"{exit_line}\n")
+
+    # CONTROL (red dikhata hai): bina safe-exit ke racy teardown fire hota hai
+    rc = subprocess.run([sys.executable, "-S", "-c", child(False)],
+                        capture_output=True, text=True, timeout=60)
+    assert rc.returncode != 0 and crash_marker.exists(), \
+        "control case abort nahi hua — harness khud broken hai"
+
+    # FIX (green): teardown_safe_exit abort-susceptible teardown ko skip karta hai
+    crash_marker.unlink(missing_ok=True)
+    r = subprocess.run([sys.executable, "-S", "-c", child(True)],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, \
+        f"rc={r.returncode}\nSTDERR:\n{r.stderr[-800:]}"
+    assert "terminate called" not in r.stderr
+    assert out_file.read_text(encoding="utf-8") == "probe-json-done\n"
+    assert not crash_marker.exists(), "atexit teardown skip hona chahiye tha"
+
+
+def test_streaming_cli_mains_wire_teardown_safe_exit():
+    # dono pyarrow-streaming CLI mains success path par hard-exit karte hain —
+    # warna JSON/summary print ke BAAD wahi rc=134 abort A1 ko fail karta
+    base = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "scripts")
+    for name in ("w1_probe_stack", "w1_build_corpus"):
+        src = open(os.path.join(base, name + ".py"), encoding="utf-8").read()
+        assert "teardown_safe_exit" in src, \
+            f"{name}: main me teardown_safe_exit wiring missing"
+
+
+def test_probe_subprocess_exits_cleanly_repeatedly(tmp_path):
+    # stability: same invocation N baar — har baar rc=0 (race environment-
+    # specific tha, isliye ek run ka pass kaafi nahi)
+    import subprocess
+
+    for i in range(3):
+        tp = tmp_path / f"run{i}"
+        tp.mkdir()
+        child_code, env = _fresh_clone_probe_harness(tp)
+        r = subprocess.run([sys.executable, "-S", "-c", child_code],
+                           cwd=str(tp), env=env, capture_output=True,
+                           text=True, timeout=120)
+        assert r.returncode == 0, \
+            f"run{i}: rc={r.returncode}\nSTDERR:\n{r.stderr[-800:]}"

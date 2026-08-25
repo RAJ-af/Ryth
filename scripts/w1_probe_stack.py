@@ -77,7 +77,12 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     out = w1_probe_stack(a.subset, limit=a.limit, config=a.config)
     print(json.dumps(out, indent=2))
-    return 0
+    # streaming-iterator threads ka shutdown race rc=134 de sakta tha
+    # (JSON ke BAAD abort) — clean rc ke liye controlled hard-exit
+    from corpus.download.huggingface import teardown_safe_exit
+
+    teardown_safe_exit(0)
+    return 0  # pragma: no cover (upar se _exit ho jata hai)
 
 
 if __name__ == "__main__":

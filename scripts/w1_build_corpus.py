@@ -151,6 +151,12 @@ def main(argv=None) -> int:
     target = int(a.total_gb * 1e9)
     print(f"[w1] target {target} bytes; got {s['total_bytes']} "
           f"({'OK' if s['total_bytes'] >= int(target * 0.95) else 'SHORT'})")
+    # HF-streaming teardown ka wahi rc=134 race — summary/marker likhe ja
+    # chuke hain; hf path par hi pyarrow load hota hai
+    if a.config:
+        from corpus.download.huggingface import teardown_safe_exit
+
+        teardown_safe_exit(0)
     return 0
 
 
