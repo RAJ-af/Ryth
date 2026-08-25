@@ -9,7 +9,11 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "scripts"))
 
 from tokenizer.bpe import BPETokenizer
 from evals.chat_template import (CHAT_TOKENS, extract_assistant,
@@ -361,3 +365,25 @@ def test_cli_ppl_smoke(tmpdir):
     assert rc == 0
     with open(outj, encoding="utf-8") as f:
         assert "py" in json.load(f)["perplexity"]
+
+# ── W2: baseline tooling ─────────────────────────────────────────────────────
+
+def test_apply_limit_slices_and_defaults():
+    from evals.cli import apply_limit
+
+    probs = list("abcde")
+    assert apply_limit(probs, None) == probs          # default: no slice
+    assert apply_limit(probs, 0) == probs             # 0/negative => no slice
+    assert apply_limit(probs, 3) == list("abc")
+    assert apply_limit([], 5) == []
+
+
+def test_cli_has_limit_flag():
+    import contextlib
+    import io
+    from evals.cli import main
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), pytest.raises(SystemExit):
+        main(["humaneval", "--help"])
+    assert "--limit" in buf.getvalue()

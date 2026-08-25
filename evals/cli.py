@@ -14,6 +14,13 @@ from .generation import load_model
 from .humaneval import save_results
 
 
+def apply_limit(problems: list, limit: int | None) -> list:
+    """Baseline sweeps ke liye pehli N problems; None/<=0 => poori list."""
+    if not limit or limit <= 0:
+        return problems
+    return problems[:limit]
+
+
 def _auto_out(task: str, ckpt: str) -> str:
     stem = os.path.splitext(os.path.basename(ckpt))[0]
     os.makedirs("results", exist_ok=True)
@@ -37,6 +44,8 @@ def main(argv=None) -> int:
         sp = sub.add_parser(name)
         common(sp)
         sp.add_argument("--problems_file", required=True)
+        sp.add_argument("--limit", type=int, default=None,
+                        help="pehli N problems (baseline/CPU sweeps)")
         sp.add_argument("--n_samples", type=int, default=20)
         sp.add_argument("--temperature", type=float, default=0.8)
         sp.add_argument("--top_k", type=int, default=40)
@@ -73,6 +82,7 @@ def main(argv=None) -> int:
         from . import mbpp as M
         problems = (M.load_mbpp(args.problems_file) if args.task == "mbpp"
                     else load_problems(args.problems_file))
+        problems = apply_limit(problems, getattr(args, "limit", None))
         fn = M.evaluate if args.task == "mbpp" else he_eval
         result = fn(problems, model=model, tok=tok, n_samples=args.n_samples,
                     mode=args.mode, temperature=args.temperature,
