@@ -7,8 +7,9 @@ meta-text dataset ke messages me kabhi leak na ho.
 
 from __future__ import annotations
 
-KNOWN_TASKS = ("instruction_to_code", "bug_fix", "docstring_to_code",
-               "explain_code", "test_gen")
+# sorted-canonical: build_seeds ka default task order bhi yahi hai
+KNOWN_TASKS = ("bug_fix", "docstring_to_code", "explain_code",
+               "instruction_to_code", "test_gen")
 
 # STORED hota hai har example me — yahi Ryth ki persona banega
 SYSTEM_PROMPT = "You are Ryth, a concise and correct coding assistant."
