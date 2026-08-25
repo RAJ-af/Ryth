@@ -119,3 +119,31 @@ def test_w1_sources_json_valid_against_registry():
     assert any(e["subpath"] == "data/python" for e in entries)
     assert any(e["subpath"] == "data/c" for e in entries)
     assert len(ids) == len(entries)                        # unique ids
+
+
+def test_plan_budget_proportional_split():
+    from w1_build_corpus import plan_budget
+
+    entries = [{"id": "a", "weight": 1}, {"id": "b", "weight": 3}]
+    got = plan_budget(entries, total_bytes=1000)
+    assert got["a"] == 250 and got["b"] == 750              # 1:3
+
+
+def test_build_local_sources_idempotent(tmp_path):
+    from w1_build_corpus import build
+
+    inp = tmp_path / "in"; inp.mkdir()
+    (inp / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    (inp / "util.c").write_text("int f(){return 1;}\n", encoding="utf-8")
+    out = tmp_path / "out"
+    args = types.SimpleNamespace(
+        config=None, input=str(inp), out=str(out), total_gb=0.000001,
+        per_source_bytes=400, seed=7)
+    s1 = build(args)
+    assert s1["total_bytes"] > 0
+    assert (out / "_SUMMARY.json").exists()
+    # dobara chalao — kuch badla nahi (idempotent)
+    mtime = (out / "_SUMMARY.json").stat().st_mtime_ns
+    s2 = build(args)
+    assert s2 == s1
+    assert (out / "_SUMMARY.json").stat().st_mtime_ns == mtime
