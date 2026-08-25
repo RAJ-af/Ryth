@@ -9,13 +9,16 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
 _HUMANEVAL_URL = ("https://raw.githubusercontent.com/openai/human-eval/master/"
                   "data/HumanEval.jsonl.gz")
-_MBPP_URL = ("https://raw.githubusercontent.com/google-research/google-research-datasets/"
-             "master/mbpp/mbpp.jsonl")
+# MBPP ka GitHub jsonl 404 ho chuka — HF datasets-server rows API hi source.
+_MBPP_ROWS_URL = "https://datasets-server.huggingface.co/rows"
+_MBPP_DATASET = "google-research-datasets/mbpp"
+_MBPP_SPLITS = ("train", "validation", "test")
 
 
 @dataclass
@@ -60,9 +63,32 @@ def download_humaneval(dest_dir: str) -> str:
     return out
 
 
+def _fetch_mbpp_rows() -> list[dict]:
+    """HF datasets-server se MBPP 'full' config ke sab rows (original schema)."""
+    rows: list[dict] = []
+    for split in _MBPP_SPLITS:
+        offset = 0
+        while True:
+            q = urllib.parse.urlencode({"dataset": _MBPP_DATASET,
+                                        "config": "full", "split": split,
+                                        "offset": offset, "length": 100})
+            req = urllib.request.Request(f"{_MBPP_ROWS_URL}?{q}",
+                                         headers={"User-Agent": "ryth-eval"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                page = json.load(r)
+            got = page.get("rows", [])
+            rows.extend(got)
+            offset += len(got)
+            if not got or offset >= page.get("num_rows_total", 0):
+                break
+    return [r["row"] for r in rows]
+
+
 def download_mbpp(dest_dir: str) -> str:
-    """Opt-in downloader — tests isko KABHI nahi chalate."""
+    """Opt-in downloader — tests isko KABHI nahi chalate (fake urlopen use karte)."""
     os.makedirs(dest_dir, exist_ok=True)
     out = os.path.join(dest_dir, "mbpp.jsonl")
-    urllib.request.urlretrieve(_MBPP_URL, out)
+    with open(out, "w", encoding="utf-8") as f:
+        for row in _fetch_mbpp_rows():
+            f.write(json.dumps(row) + "\n")
     return out

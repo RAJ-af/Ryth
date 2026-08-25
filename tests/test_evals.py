@@ -414,3 +414,54 @@ def test_report_subcommand_writes_markdown(tmp_path, capsys):
     rc2 = main(["report", str(d), "--out", str(out_file)])
     assert rc2 == 0
     assert "pass@1" in out_file.read_text(encoding="utf-8")
+
+
+def test_download_mbpp_pages_hf_api(tmp_path, monkeypatch):
+    # GitHub ka mbpp.jsonl 404 ho chuka; downloader ab HF datasets-server
+    # rows API ko paginate karta hai. Fake urlopen => offline test.
+    import io
+    import urllib.parse
+    import urllib.request as U
+    import evals.datasets as D
+
+    def page(split, offset, n, total):
+        body = json.dumps({"num_rows_total": total,
+                           "rows": [{"row_idx": offset + i,
+                                     "row": {"task_id": f"{split}-{offset+i}",
+                                             "text": "t", "code": "c",
+                                             "test_list": ["assert t"]}}
+                                    for i in range(n)]}).encode()
+        return type("R", (), {"__enter__": lambda s: s,
+                              "__exit__": lambda s, *a: False,
+                              "read": lambda s: body})()
+
+    seen = []
+
+    def fake_urlopen(req, timeout=None):
+        url = getattr(req, "full_url", req)
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        split, off = q["split"][0], int(q["offset"][0])
+        seen.append((split, off))
+        total = 150 if split == "train" else (50 if split == "validation" else 25)
+        return page(split, off, min(100, total - off), total)
+
+    monkeypatch.setattr(U, "urlopen", fake_urlopen)
+    out = D.download_mbpp(str(tmp_path))
+    assert out.endswith("mbpp.jsonl")
+    rows = [json.loads(l) for l in open(out, encoding="utf-8")]
+    assert len(rows) == 225                      # 150 + 50 + 25
+    assert ("train", 100) in seen                # pagination chali
+    assert rows[0]["task_id"] == "train-0"       # original schema passthrough
+
+
+def test_bench_files_present_and_parse():
+    # files committed hain — offline count check, koi download nahi
+    from evals import mbpp as _m
+    from evals.datasets import load_problems
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    he = load_problems(os.path.join(root, "bench", "humaneval.jsonl.gz"))
+    mp = _m.load_mbpp(os.path.join(root, "bench", "mbpp.jsonl"))
+    assert len(he) == 164
+    assert len(mp) >= 800
+    assert all(p.prompt and p.test for p in he[:5])
