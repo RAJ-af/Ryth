@@ -29,9 +29,10 @@ def _install_fake_datasets(monkeypatch_rows):
     """sys.modules me nakli `datasets` bhejo jiska load_dataset rows deta hai."""
     calls = {}
 
-    def fake_load(name, split=None, streaming=None, data_dir=None,
-                  revision=None):
+    def fake_load(name, cfg_name=None, split=None, streaming=None,
+                  data_dir=None, revision=None):
         calls["name"] = name
+        calls["cfg_name"] = cfg_name
         calls["split"] = split
         calls["streaming"] = streaming
         calls["data_dir"] = data_dir
@@ -48,8 +49,8 @@ def _install_gated_fake_datasets(gated_name):
     """Primary GATED behave kare (401/auth error), baaki sources rows dein."""
     calls = []
 
-    def fake_load(name, split=None, streaming=None, data_dir=None,
-                  revision=None):
+    def fake_load(name, cfg_name=None, split=None, streaming=None,
+                  data_dir=None, revision=None):
         calls.append((name, data_dir, revision))
         if name == gated_name:
             raise RuntimeError(f"{gated_name} is gated: 401 authentication "
@@ -125,22 +126,40 @@ def test_w1_probe_counts_license_histogram():
 
 
 def test_w1_sources_json_valid_against_registry():
+    # W1-revision: 12 Indic wiki + English + 8 github-code langs + 6 curated
+    # repos — SAB ungated (live-probed), har entry license_hint ke saath
     from corpus.sources.registry import Source
 
     cfg = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "configs", "w1_sources.json")
     entries = json.load(open(cfg, encoding="utf-8"))
-    assert isinstance(entries, list) and len(entries) >= 2
+    assert isinstance(entries, list) and len(entries) >= 27
     ids = set()
     for e in entries:
-        s = Source(**e)                                    # schema validate ho gaya
+        s = Source.from_dict(e)                            # schema validate
         assert s.enabled and s.kind in ("huggingface", "github")
+        assert s.license_hint != "UNKNOWN"                 # policy: hint must
         ids.add(s.id)
-    # ungated primary (stack-dedup/starcoderdata dono gated=auto hain):
-    # codeparrot/github-code parquet-mirror, per-language dirs + revision
-    assert all(e["location"] == "codeparrot/github-code" for e in entries)
-    assert {e["subpath"] for e in entries} == {"Python-all", "C-all"}
-    assert all(e.get("ref") == "refs/convert/parquet" for e in entries)
+
+    wiki = [e for e in entries if e["location"] == "wikimedia/wikipedia"]
+    assert len(wiki) == 13                                 # 12 Indic + en
+    assert {w["name"].split(".")[-1] for w in wiki} == {
+        "hi", "bn", "mr", "te", "ta", "gu", "ur", "kn", "ml", "pa", "or",
+        "as", "en"}
+    assert all(w.get("license_hint") == "CC-BY-SA-3.0" for w in wiki)
+
+    ghcode = [e for e in entries
+              if e["location"] == "codeparrot/github-code"]
+    assert len(ghcode) == 8                                # verified subpaths
+    assert {g["subpath"] for g in ghcode} == {
+        "Python-all", "C-all", "C++-all", "Java-all", "JavaScript-all",
+        "TypeScript-all", "C#-all", "HTML-all"}
+    assert all(g.get("ref") == "refs/convert/parquet" for g in ghcode)
+
+    repos = [e for e in entries if e["kind"] == "github"]
+    assert {r["location"] for r in repos} == {
+        "BurntSushi/ripgrep", "gin-gonic/gin", "square/moshi",
+        "sqlfluff/sqlfluff", "ohmyzsh/ohmyzsh", "twbs/bootstrap"}
     assert len(ids) == len(entries)                        # unique ids
 
 
@@ -172,16 +191,25 @@ def test_build_local_sources_idempotent(tmp_path):
     assert (out / "_SUMMARY.json").stat().st_mtime_ns == mtime
 
 
-def test_stratified_sample_roundrobins_languages(tmp_path):
+def test_stratified_sample_roundrobins_sources(tmp_path):
+    # W1-revision: SOURCE-level buckets — har source apna char-quota bharta
+    # hai, chahe file-count/size alag ho (multilingual balance guarantee)
     from w1_train_tokenizer import stratified_sample
 
-    for i in range(4):
-        (tmp_path / f"m{i}.py").write_text("def f(): pass\n" * 20, encoding="utf-8")
-        (tmp_path / f"k{i}.c").write_text("int main(){}\n" * 20, encoding="utf-8")
-    texts = stratified_sample(str(tmp_path), target_chars=100000, seed=1)
-    py = sum(1 for t in texts if t.lstrip().startswith("def "))
-    c = len(texts) - py
-    assert py == 4 and c == 4                              # dono languages poori
+    big = tmp_path / "stage" / "hf_py"
+    big.mkdir(parents=True)
+    for i in range(8):
+        (big / f"m{i}.py").write_text("def f(): pass\n" * 20, encoding="utf-8")
+    small = tmp_path / "stage" / "hf_hi"
+    small.mkdir()
+    for i in range(2):
+        (small / f"d{i}.txt").write_text("यह हिंदी पाठ है।\n" * 10,
+                                         encoding="utf-8")
+    texts = stratified_sample(str(tmp_path / "stage"), target_chars=10 ** 9,
+                              seed=1)
+    py = sum(1 for t in texts if "def f" in t)
+    hi = sum(1 for t in texts if "हिंदी" in t)
+    assert py == 8 and hi == 2                # dono sources apne quota tak bhare
 
 
 def test_time_probe_returns_positive_rate(tmp_path):

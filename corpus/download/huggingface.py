@@ -22,6 +22,8 @@ _CODE_FIELDS = ("content", "code", "func_code_string", "whole_func_string",
                 "text", "source", "body")
 _EXT = {"python": ".py", "javascript": ".js", "typescript": ".ts", "go": ".go",
         "rust": ".rs", "java": ".java", "cpp": ".cpp", "c": ".c",
+        "cplusplus": ".cpp", "csharp": ".cs", "kotlin": ".kt",
+        "html": ".html", "css": ".css", "sql": ".sql", "shell": ".sh",
         "markdown": ".md"}
 
 # gate/auth failure markers (case-insensitive substring match)
@@ -60,10 +62,12 @@ def open_streaming(entry: dict, split: str = "train"):
     + ungated-alternative hint). Returns the raw streaming dataset.
     """
     attempts = [{"location": entry.get("location"),
+                 "name": entry.get("name") or None,
                  "subpath": entry.get("subpath") or None,
                  "revision": entry.get("revision")}]
     for fb in entry.get("fallbacks") or []:
         attempts.append({"location": fb.get("location"),
+                         "name": fb.get("name") or None,
                          "subpath": fb.get("subpath") or None,
                          "revision": fb.get("revision")})
     import datasets  # local import (optional dep)
@@ -73,7 +77,7 @@ def open_streaming(entry: dict, split: str = "train"):
     served = None
     for i, at in enumerate(attempts):
         try:
-            ds = datasets.load_dataset(at["location"], split=split,
+            ds = datasets.load_dataset(at["location"], at["name"], split=split,
                                        streaming=True, data_dir=at["subpath"],
                                        revision=at["revision"])
             served = at["location"]
@@ -128,6 +132,7 @@ class HuggingFaceDownloader(Downloader):
         revision = getattr(source, "ref", "HEAD")
         entry = {"location": source.location,
                  "subpath": getattr(source, "subpath", ""),
+                 "name": getattr(source, "name", ""),
                  "revision": None if revision in ("HEAD", "", None) else revision,
                  "fallbacks": fallbacks or []}
         ds, served = open_streaming(entry, split=self.split)

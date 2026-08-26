@@ -32,6 +32,8 @@ class Source:
     category: str = "code"                # one of CATEGORIES
     ref: str = "HEAD"                     # git ref / revision (github)
     subpath: str = ""                     # only ingest this subdir
+    name: str = ""                        # HF dataset config name (jaise
+                                          # "20231101.hi" wikimedia/wikipedia)
     enabled: bool = True
 
     def __post_init__(self):

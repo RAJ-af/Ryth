@@ -96,6 +96,39 @@ def _stage_download(entry: dict, budget: int, stage_root: str,
     return {"files": files, "bytes": total}
 
 
+def build_val_split(stage_root: str, val_out: str, count: int) -> int:
+    """Har source-dir se pehli `count` real files {val_out}/<source>/ me copy.
+
+    Held-out split — tokenizer EFFICIENCY harness isi par measure karta hai
+    (training sample par nahi). Deterministic: sorted walk. `_VAL_DONE`
+    marker counts ke saath — resume-safe.
+    """
+    done = os.path.join(val_out, "_VAL_DONE")
+    if os.path.exists(done):
+        return json.load(open(done, encoding="utf-8"))["files"]
+    os.makedirs(val_out, exist_ok=True)
+    n = 0
+    for src_name in sorted(os.listdir(stage_root)):
+        sdir = os.path.join(stage_root, src_name)
+        if not os.path.isdir(sdir) or src_name.startswith("_"):
+            continue
+        files: list[str] = []
+        for dp, _, fns in os.walk(sdir):
+            for fn in sorted(fns):
+                if not fn.startswith("_"):
+                    files.append(os.path.join(dp, fn))
+        if not files:
+            continue
+        dst = os.path.join(val_out, src_name)
+        os.makedirs(dst, exist_ok=True)
+        for f in files[:count]:
+            shutil.copy(f, dst)
+            n += 1
+    with open(done, "w", encoding="utf-8") as f:
+        json.dump({"files": n, "per_source": count}, f)
+    return n
+
+
 def build(args) -> dict:
     entries = (json.load(open(args.config, encoding="utf-8"))
                if getattr(args, "config", None) else
@@ -113,6 +146,13 @@ def build(args) -> dict:
         summary["sources"][e["id"]] = _stage_download(
             e, cap, stage_root, getattr(args, "input", None))
     summary["total_bytes"] = sum(v["bytes"] for v in summary["sources"].values())
+    # held-out val split (per-source) — efficiency harness + B1 val-loss isi
+    # se; _VAL_DONE marker resume-safe
+    if getattr(args, "val_count", 0):
+        val_out = (getattr(args, "val_out", None)
+                   or os.path.join(args.out, "..", "val_src"))
+        summary["val_files"] = build_val_split(
+            stage_root, os.path.abspath(val_out), int(args.val_count))
     # config fingerprint — same inputs par rerun me file nahi chhooti
     # (idempotent), alag inputs par stale summary doobar likhi jaati hai (fix)
     summary["config"] = {
@@ -143,6 +183,8 @@ def main(argv=None) -> int:
     p.add_argument("--total-gb", type=float, default=2.4)
     p.add_argument("--per-source-bytes", type=int, default=0,
                    help="hard cap per source (testing)")
+    p.add_argument("--val-count", type=int, default=40,
+                   help="held-out files per source (0 = skip val split)")
     a = p.parse_args(argv)
     if a.config and a.config.lower() == "none":
         a.config = None

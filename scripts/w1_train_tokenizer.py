@@ -1,8 +1,9 @@
-"""W1 tokenizer training — scratch BPE @24k on a STRATIFIED C+Python sample.
+"""W1 tokenizer training — multilingual+code BPE on a SOURCE-balanced sample.
 
-Spec risk-table ke mutabiq poore corpus pe train karna CPU pe bahut dheema hai;
-isliye stratified sample (default 60MB) + ~1MB slice ka time-probe jo ETA
-batata hai. `--probe-only` se sirf estimate, training nahi.
+Har source-dir (stage/<source>/...) apna char-quota bharta hai — 12 Indic
+bhashaen + English + 14 code sources balanced representation paate hain
+(W1-revision; pehle sirf .py/.c ext-buckets the). ~1MB slice ka time-probe
+ETA deta hai. `--probe-only` se sirf estimate, training nahi.
 """
 
 from __future__ import annotations
@@ -11,62 +12,51 @@ import argparse
 import json
 import os
 import random
+import sys
 import time
 
 # --- make the repo importable when run from a clone (scripts/..) ------------
-import sys
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(_HERE)
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
-
-_CODE_EXTS = (".py", ".c")                   # sirf code files bucket hoti hain
-
-
-def _bucket_of(path: str) -> str | None:
-    name = os.path.basename(path)
-    if name.startswith("_"):                 # _DONE jaise markers skip
-        return None
-    for e in _CODE_EXTS:
-        if name.endswith(e):
-            return e
-    return None                              # .json/logs waghera training me nahi
+# pipes block-buffer hote hain — Kaggle cell me progress live dikhe
+if hasattr(sys.stdout, "reconfigure"):                 # pragma: no cover
+    sys.stdout.reconfigure(line_buffering=True)
 
 
 def stratified_sample(root: str, target_chars: int,
                       seed: int = 1234) -> list[str]:
-    """Extension-buckets (.py vs .c) round-robin; chhoti bucket khatam hone
-    par bachi hui demand poori bhasha se — C≪Python ho toh sample Python-heavy
-    hoga (stratification best-effort hai, guarantee nahi)."""
-    buckets: dict[str, list[str]] = {".py": [], ".c": []}
+    """SOURCE-level buckets: stage/<source>/ ke files round-robin, har source
+    apna char-quota (target // n_sources) bharta hai. Chhoti source apni
+    files khatam hone par ruk jati hai (balance best-effort per-source).
+    Deterministic: sorted source order + seed-shuffled files."""
+    sources: dict[str, list[str]] = {}
     for dp, _, fns in os.walk(root):
         for fn in fns:
-            b = _bucket_of(fn)
-            if b is not None:
-                buckets[b].append(os.path.join(dp, fn))
-    for files in buckets.values():
-        files.sort()              # os.walk ka order FS-dependent hota hai —
-                                  # sort ke bina same seed alag sample deta
+            if fn.startswith("_"):            # _DONE/_SUMMARY markers skip
+                continue
+            rel = os.path.relpath(dp, root)
+            top = rel.split(os.sep)[0] if rel != "." else "_flat"
+            sources.setdefault(top, []).append(os.path.join(dp, fn))
+    names = sorted(sources)
+    if not names:
+        return []
+    quota = max(1, target_chars // len(names))
     rng = random.Random(seed)
-    for files in buckets.values():
-        rng.shuffle(files)
     texts: list[str] = []
-    got = 0
-    idx = 0
-    while got < target_chars:
-        progressed = False
-        for files in buckets.values():
-            if idx < len(files):
-                progressed = True
-                with open(files[idx], encoding="utf-8", errors="replace") as f:
-                    t = f.read()
-                texts.append(t)
-                got += len(t)
-        if not progressed:
-            break                                   # buckets khatam ho gaye
-        idx += 1
+    for name in names:
+        files = sorted(sources[name])
+        rng.shuffle(files)
+        got = 0
+        i = 0
+        while got < quota and i < len(files):
+            with open(files[i], encoding="utf-8", errors="replace") as f:
+                t = f.read()
+            texts.append(t)
+            got += len(t)
+            i += 1
     return texts
 
 
@@ -90,7 +80,7 @@ def time_probe(texts: list[str], tok=None) -> float:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--raw", default="corpus_out/stage")
-    p.add_argument("--vocab", type=int, default=24576)
+    p.add_argument("--vocab", type=int, default=32768)
     p.add_argument("--sample-mb", type=float, default=60.0)
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--out", default="tok/tokenizer.json")
@@ -98,29 +88,45 @@ def main(argv=None) -> int:
                    help="sirf chars/sec + ETA print karo, train mat karo")
     a = p.parse_args(argv)
 
+    if not os.path.isdir(a.raw):
+        raise SystemExit(f"[tok] raw dir nahi mila: {a.raw!r} — corpus stage "
+                         "pehle complete karo (w1_build_corpus.py)")
     target = int(a.sample_mb * 1_000_000)
     texts = stratified_sample(a.raw, target_chars=target, seed=a.seed)
     total = sum(len(t) for t in texts)
-    print(f"[sample] files={len(texts)} chars={total:,}")
+    if not texts:
+        raise SystemExit(f"[tok] {a.raw!r} me koi text file nahi mili")
+    print(f"[sample] sources se files={len(texts)} chars={total:,}")
     rate = time_probe(texts)
     eta_min = total / max(rate, 1.0) / 60.0
     print(f"[probe] ~{rate:,.0f} chars/sec -> ETA >= {eta_min:.0f} min "
-          f"(lower bound — 24k vocab par merges mehnat zyada maangte hain)")
+          f"(lower bound — bada vocab merges ko mehnat zyada maangta hai)")
     if a.probe_only:
         return 0
 
+    from tokenizer import DEFAULT_SPECIAL_TOKENS
     from tokenizer.bpe import BPETokenizer
 
     tok = BPETokenizer()
     t0 = time.time()
     tok.train(texts, vocab_size=a.vocab, verbose=True)
+    # specials MERGES ke BAAD append hote hain — merge-ids untouched rehte
+    # hain; W3 SFT/inference isi saved file se exactly yehi IDs dekhega
+    # (W1-revision fix: pehle register ho hi nahi rahe the)
+    tok.add_special_tokens(DEFAULT_SPECIAL_TOKENS)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     tok.save(a.out)
     meta = {"vocab_size": tok.vocab_size, "sample_chars": total,
             "train_seconds": round(time.time() - t0, 1),
-            "seed": a.seed, "sources_root": a.raw}
+            "seed": a.seed, "sources_root": a.raw,
+            "special_tokens": dict(tok.special_tokens)}
     with open(a.out + ".meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
+    # resume marker — pack/notebook isse 'tokenizer complete' verify karte hain
+    with open(os.path.join(os.path.dirname(a.out) or ".", "_DONE"), "w",
+              encoding="utf-8") as f:
+        json.dump({"vocab_size": tok.vocab_size,
+                   "specials": len(tok.special_tokens)}, f)
     print(json.dumps(meta, indent=2))
     return 0
 
