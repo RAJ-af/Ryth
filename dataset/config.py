@@ -26,6 +26,11 @@ DEFAULT_GENERATED_MARKERS = (
 DEFAULT_ALLOWED_EXT = {
     ".py", ".md", ".json", ".yaml", ".yml", ".toml", ".sh", ".bash",
     ".txt", ".cfg", ".ini", ".dockerfile",
+    # W1 code languages — iske bina pack stage .c/.rs/... SILENTLY drop
+    # karta tha (audit finding; tokenizer dekhta tha par RDS me nahi jata)
+    ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".java",
+    ".js", ".jsx", ".ts", ".tsx", ".rs", ".go", ".kt", ".kts",
+    ".cs", ".sql", ".html", ".htm", ".css",
 }
 
 

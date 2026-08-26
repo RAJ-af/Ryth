@@ -1,7 +1,8 @@
 """Module 5 — Language Detector.
 
 Extension + content heuristics se file ka type detect karta hai.
-Abhi: Python, Markdown, JSON, YAML, TOML, Dockerfile, Bash. Future: multi-language.
+W1-revision: 13 code languages (C/C++/Java/JS/TS/Rust/Go/Kotlin/C#/SQL/
+HTML/CSS) + prose support — pack stage inhe drop na kare.
 """
 
 from __future__ import annotations
@@ -14,6 +15,15 @@ _EXT_MAP = {
     ".yaml": "yaml", ".yml": "yaml", ".toml": "toml",
     ".sh": "bash", ".bash": "bash", ".txt": "text",
     ".cfg": "ini", ".ini": "ini",
+    # W1 code languages
+    ".c": "c", ".h": "c",
+    ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+    ".java": "java",
+    ".js": "javascript", ".jsx": "javascript",
+    ".ts": "typescript", ".tsx": "typescript",
+    ".rs": "rust", ".go": "go", ".kt": "kotlin", ".kts": "kotlin",
+    ".cs": "csharp", ".sql": "sql",
+    ".html": "html", ".htm": "html", ".css": "css",
 }
 
 

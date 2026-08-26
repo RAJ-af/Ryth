@@ -60,11 +60,8 @@ def stratified_sample(root: str, target_chars: int,
     return texts
 
 
-def time_probe(texts: list[str], tok=None) -> float:
+def time_probe(texts: list[str], impl: str = "fast") -> float:
     """~1MB slice pe train karke chars/sec estimate wapas lao."""
-    from tokenizer.bpe import BPETokenizer
-
-    tok = tok or BPETokenizer()
     probe: list[str] = []
     size = 0
     for t in texts:
@@ -73,7 +70,14 @@ def time_probe(texts: list[str], tok=None) -> float:
         if size >= 1_000_000:
             break
     t0 = time.time()
-    tok.train(probe, vocab_size=2048, verbose=False)
+    if impl == "fast":
+        from tokenizer.fast_bpe import train_fast
+
+        train_fast(probe, vocab_size=2048, verbose=False)
+    else:
+        from tokenizer.bpe import BPETokenizer
+
+        BPETokenizer().train(probe, vocab_size=2048, verbose=False)
     return size / max(1e-9, time.time() - t0)
 
 
@@ -84,6 +88,11 @@ def main(argv=None) -> int:
     p.add_argument("--sample-mb", type=float, default=60.0)
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--out", default="tok/tokenizer.json")
+    p.add_argument("--impl", choices=("fast", "naive"), default="fast",
+                   help="fast = incremental heap (bit-identical proven, "
+                        "tests/test_fast_bpe.py); naive = O(merges x corpus)")
+    p.add_argument("--checkpoint-every", type=int, default=2000,
+                   help="fast impl: itne merges par partial save (0 = off)")
     p.add_argument("--probe-only", action="store_true",
                    help="sirf chars/sec + ETA print karo, train mat karo")
     a = p.parse_args(argv)
@@ -97,9 +106,9 @@ def main(argv=None) -> int:
     if not texts:
         raise SystemExit(f"[tok] {a.raw!r} me koi text file nahi mili")
     print(f"[sample] sources se files={len(texts)} chars={total:,}")
-    rate = time_probe(texts)
+    rate = time_probe(texts, impl=a.impl)
     eta_min = total / max(rate, 1.0) / 60.0
-    print(f"[probe] ~{rate:,.0f} chars/sec -> ETA >= {eta_min:.0f} min "
+    print(f"[probe:{a.impl}] ~{rate:,.0f} chars/sec -> ETA >= {eta_min:.0f} min "
           f"(lower bound — bada vocab merges ko mehnat zyada maangta hai)")
     if a.probe_only:
         return 0
@@ -109,7 +118,15 @@ def main(argv=None) -> int:
 
     tok = BPETokenizer()
     t0 = time.time()
-    tok.train(texts, vocab_size=a.vocab, verbose=True)
+    if a.impl == "fast":
+        from tokenizer.fast_bpe import train_fast
+
+        ckpt = (a.out + ".partial") if a.checkpoint_every > 0 else None
+        tok = train_fast(texts, vocab_size=a.vocab, verbose=True,
+                         checkpoint_path=ckpt,
+                         checkpoint_every=a.checkpoint_every)
+    else:
+        tok.train(texts, vocab_size=a.vocab, verbose=True)
     # specials MERGES ke BAAD append hote hain — merge-ids untouched rehte
     # hain; W3 SFT/inference isi saved file se exactly yehi IDs dekhega
     # (W1-revision fix: pehle register ho hi nahi rahe the)
@@ -118,6 +135,7 @@ def main(argv=None) -> int:
     tok.save(a.out)
     meta = {"vocab_size": tok.vocab_size, "sample_chars": total,
             "train_seconds": round(time.time() - t0, 1),
+            "impl": a.impl,
             "seed": a.seed, "sources_root": a.raw,
             "special_tokens": dict(tok.special_tokens)}
     with open(a.out + ".meta.json", "w", encoding="utf-8") as f:

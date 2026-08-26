@@ -77,6 +77,33 @@ def test_language_detect():
     assert detect_language("x.json", "not json") == "text"   # invalid json downgraded
 
 
+def test_language_detect_multilang_code():
+    # W1-revision: 13 code languages pack-stage tak pahunchni chahiye
+    for ext, lang in ((".c", "c"), (".h", "c"), (".cpp", "cpp"),
+                      (".cc", "cpp"), (".hpp", "cpp"), (".java", "java"),
+                      (".js", "javascript"), (".jsx", "javascript"),
+                      (".ts", "typescript"), (".tsx", "typescript"),
+                      (".rs", "rust"), (".go", "go"), (".kt", "kotlin"),
+                      (".kts", "kotlin"), (".cs", "csharp"),
+                      (".sql", "sql"), (".html", "html"), (".htm", "html"),
+                      (".css", "css")):
+        assert detect_language(f"f{ext}", "int main(){}\n") == lang, ext
+
+
+def test_validator_accepts_new_code_exts():
+    # allowed_ext ab .c/.rs/... bhi — warna pack stage silently drop karta tha
+    cfg = RDEConfig()
+    v = Validator(cfg)
+    for fname, lang in (("a.c", "c"), ("b.rs", "rust"), ("c.go", "go"),
+                        ("d.kt", "kotlin"), ("e.sql", "sql"),
+                        ("f.html", "html"), ("g.css", "css"),
+                        ("h.java", "java"), ("i.ts", "typescript"),
+                        ("j.cs", "csharp")):
+        rec = FileRecord(path=fname, repo="r",
+                         text="fn main() { }\n" * 4, language=lang)
+        assert v.validate(rec) is True, f"{fname} drop hua ({rec.drop_reason})"
+
+
 # ---------------- validator ----------------
 def test_validator_syntax():
     cfg = RDEConfig()

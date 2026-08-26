@@ -214,12 +214,11 @@ def test_stratified_sample_roundrobins_sources(tmp_path):
 
 def test_time_probe_returns_positive_rate(tmp_path):
     from w1_train_tokenizer import stratified_sample, time_probe
-    from tokenizer.bpe import BPETokenizer
 
     (tmp_path / "a.py").write_text("x = 1\n" * 5000, encoding="utf-8")
     texts = stratified_sample(str(tmp_path), target_chars=10 ** 9, seed=0)
-    rate = time_probe(texts[:1], tok=BPETokenizer())
-    assert rate > 0
+    assert time_probe(texts[:1], impl="fast") > 0
+    assert time_probe(texts[:1], impl="naive") > 0
 
 
 def _mini_rds_part(tmp_path, tag):
