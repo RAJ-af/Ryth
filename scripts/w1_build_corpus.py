@@ -185,6 +185,8 @@ def main(argv=None) -> int:
                    help="hard cap per source (testing)")
     p.add_argument("--val-count", type=int, default=40,
                    help="held-out files per source (0 = skip val split)")
+    p.add_argument("--val-out", default=None,
+                   help="val split dir (default: <out>/../val_src)")
     a = p.parse_args(argv)
     if a.config and a.config.lower() == "none":
         a.config = None
