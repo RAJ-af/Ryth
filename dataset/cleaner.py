@@ -23,6 +23,15 @@ def looks_binary(raw: bytes) -> bool:
         return True
     if not raw:
         return False
+    # Valid UTF-8 => TEXT. Indic/CJK scripts ke UTF-8 bytes high-bit set hote
+    # hain — neeche wala ASCII-only heuristic poora Devanagari/Bengali corpus
+    # 'binary' drop kar deta tha (W1-revision fix). Invalid encoding par hi
+    # byte-heuristic chalti hai (mojibake/compiled junk wahan pakda jata hai).
+    try:
+        raw.decode("utf-8")
+        return False
+    except UnicodeDecodeError:
+        pass
     # bahut zyada non-text bytes => binary
     text_chars = bytes(range(32, 127)) + b"\n\r\t\f\b"
     nontext = sum(1 for b in raw[:4096] if b not in text_chars)
