@@ -164,24 +164,9 @@ MAX_STEPS = 12
 
 The real run should therefore use the full intended dataset and a substantially larger training budget.
 
-## 11. Recommended Next Step
+## 11. Next Validation Stage
 
-For the real RYTH experiment:
-
-1. Set `SMOKE=False`.
-2. Point `RAW_DIR` / configured data sources to the intended full corpus.
-3. Rebuild or verify the tokenizer against the real corpus.
-4. Generate the real RDS dataset.
-5. Start with a meaningful training budget, measured in **thousands of steps**, rather than 12.
-6. Keep checkpoint/resume enabled.
-7. Track:
-   - Training loss
-   - Validation loss
-   - Perplexity
-   - Tokens/sec
-   - GPU memory
-   - Checkpoint progress
-8. Evaluate generations on a fixed held-out evaluation set.
+The smoke test validates the training pipeline. The next validation stage is a real-data training run with a substantially larger training budget, followed by quantitative and qualitative evaluation.
 
 ## 12. Final Status
 
