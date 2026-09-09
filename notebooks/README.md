@@ -4,6 +4,15 @@ End-to-end, runnable notebooks for Ryth. Both walk through the full pipeline
 (`corpus → tokenizer → RDS → model → training → eval → export`) using only the
 public library — no core code is modified.
 
+## `ryth_kaggle_start.ipynb` — ⭐ start here (Kaggle-first, Hinglish)
+
+The simplest way to start work: upload to Kaggle → GPU T4 → Internet ON →
+**Run All**. One CONFIG cell (`SMOKE = True` for a 2–5 min smoke test,
+`SMOKE = False` + `RAW_DIR` for a real run), idempotent stages with
+auto-resume from `latest.pt`, and a big-vocab fast-tokenizer path for real runs.
+Validated: corpus → tokenizer → RDS stages execute cleanly, including the
+skip/reload paths.
+
 ## `ryth_end_to_end.ipynb` — **official** end-to-end entry point
 
 The **canonical** "Run All" notebook. One file takes you from raw code (or a
