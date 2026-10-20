@@ -3,6 +3,14 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 30M Prototype End-to-End Tools — 2026-07-06
+
+End-to-end data preparation, CPU smoke testing, and generation scripts for the 30M prototype.
+
+- **`scripts/prepare_30m_data.sh`** — Automated pipeline that builds the corpus, trains the BPE tokenizer (vocab 16000, saved to `tok/`), and constructs the RDS dataset (seq_len 1024). Automatically fetches permissively licensed source code or falls back to a sample fixture if offline.
+- **`scripts/smoke_test.sh`** — CPU smoke test script wrapping `ryth-train` for 20 steps to confirm training pipeline integrity and loss decrease.
+- **`scripts/generate.py`** — Inference generation CLI loading checkpoint (`final.pt`) + tokenizer (`tokenizer.json`) with configurable prompt, temperature, top-k, max new tokens, and auto device selection.
+
 ## [Unreleased] — End-to-end notebook (official entry point) — 2026-07-06
 
 The canonical "Run All" notebook for Ryth — one file that takes a raw code
