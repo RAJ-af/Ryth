@@ -3,6 +3,17 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 30M Prototype Ready End-to-End — 2026-07-06
+
+Prepares the 30M prototype model end-to-end (ROADMAP Phase 6). Adds dataset
+preparation automation script, code generation script, and quickstart docs updates.
+
+- **`scripts/prepare_30m_data.sh`** — Automated pipeline execution script:
+  `ryth-corpus build` → `ryth-tokenizer train` (vocab 16000) → `ryth-rde build` (seq_len 1024). Includes synthetic permissive fallback when no raw repo folder is present.
+- **`scripts/generate.py`** — Inference CLI script to load model checkpoints (`final.pt`, `best.pt`), load tokenizer, take prompt (argument/stdin), and run autoregressive sampling with `--temperature`, `--top_k`, `--max_new_tokens`, and `--device` flags.
+- **CPU Smoke Verification** — CPU smoke test confirmed 30M prototype (`ryth_30m`, 24.3M params) training end-to-end with loss steadily decreasing across steps.
+- **Docs Update** — Updated `docs/quickstart.md` with dataset preparation and generation instructions.
+
 ## [Unreleased] — End-to-end notebook (official entry point) — 2026-07-06
 
 The canonical "Run All" notebook for Ryth — one file that takes a raw code
