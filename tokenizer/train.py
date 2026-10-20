@@ -51,11 +51,14 @@ def iter_text_files(pattern: str):
 
 
 def train_tokenizer(texts, vocab_size: int, out_dir: str, *,
-                    special_tokens=None, verbose: bool = False) -> BPETokenizer:
+                    special_tokens=None, verbose: bool = False,
+                    workers: int | None = None,
+                    max_bytes: int | None = None) -> BPETokenizer:
     """Train a BPE tokenizer on `texts` and save to `out_dir/tokenizer.json`."""
     special_tokens = special_tokens or DEFAULT_SPECIAL_TOKENS
     tok = BPETokenizer()
-    tok.train(list(texts), vocab_size=vocab_size, verbose=verbose)
+    tok.train(list(texts), vocab_size=vocab_size, verbose=verbose,
+              workers=workers, max_bytes=max_bytes)
     tok.add_special_tokens(special_tokens)
 
     os.makedirs(out_dir, exist_ok=True)

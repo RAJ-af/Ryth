@@ -3,6 +3,16 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] — Fast BPE Tokenizer Trainer — 2026-07-06
+
+Optimized Byte-Pair Encoding (BPE) tokenizer training in pure Python standard library (~300x faster).
+
+- **Optimized BPE Training Engine** — Replaced full-corpus rescans with unique-word deduplication, incremental pair-count updates, inverted index mapping, and lazy heap selection with deterministic tie-breaking.
+- **Multiprocessing Pre-tokenization** — Added optional parallel word counting (`--workers N`, defaulting to `os.cpu_count()`) for regex pre-tokenization while preserving bit-identical merge sequence ordering.
+- **Corpus Truncation Flag** — Added `--max_bytes N` to `ryth-tokenizer train` to cap corpus text size.
+- **Benchmark Script** — Added `scripts/bench_tokenizer.py` to benchmark tokenizer training duration and throughput on 2 MB and 10 MB code corpora.
+- **Reference Naive Trainer** — Maintained `BPETokenizer._train_naive` for differential testing and parity verification in test suite.
+
 ## [0.3.1] — 30M Prototype End-to-End Tools — 2026-07-06
 
 End-to-end data preparation, CPU smoke testing, and generation scripts for the 30M prototype.
