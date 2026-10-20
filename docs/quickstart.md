@@ -33,7 +33,16 @@ ryth-rde --help
 ryth-train --help          # needs pip install -e ".[train]"
 ```
 
-## 3. Get some code to train on
+## 3. Prepare Data for 30M Prototype (or custom code)
+
+You can use `scripts/prepare_30m_data.sh` to run the full dataset preparation pipeline in one step:
+`ryth-corpus build` → `ryth-tokenizer train` (`--vocab 16000`) → `ryth-rde build` (`--seq_len 1024`).
+
+```bash
+./scripts/prepare_30m_data.sh [RAW_DIR] [CORPUS_DIR] [TOK_DIR] [RDS_DIR]
+```
+
+Or step-by-step manually:
 
 RDE accepts **either** input layout:
 
@@ -67,7 +76,7 @@ python -c "from tests.sample_data import build_sample; build_sample('raw_repos')
 Train the scratch BPE tokenizer on your code files:
 
 ```bash
-ryth-tokenizer train --files 'raw_repos/**/*.py' --vocab 8000 --out tok
+ryth-tokenizer train --files 'raw_repos/**/*.py' --vocab 16000 --out tok
 ```
 
 - `--files` — glob of files to train on (or `--data <jsonl_dir>` for JSONL corpora)
@@ -151,7 +160,21 @@ ryth-train --data_dir rds_out --resume latest
 > smoke-testing the pipeline; use a GPU for real runs. Full details:
 > [training.md](training.md).
 
-## 9. Run the examples / tests
+## 9. Generate Code from Checkpoint
+
+Once trained, generate code using `scripts/generate.py`:
+
+```bash
+python scripts/generate.py \
+    --checkpoint runs/ryth/final.pt \
+    --tokenizer tok/tokenizer.json \
+    --prompt "def add(a, b):" \
+    --temperature 0.7 \
+    --top_k 40 \
+    --max_new_tokens 100
+```
+
+## 10. Run the examples / tests
 
 ```bash
 python examples/example_train_tokenizer.py
