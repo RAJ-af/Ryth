@@ -33,6 +33,27 @@ ryth-rde --help
 ryth-train --help          # needs pip install -e ".[train]"
 ```
 
+## One-Command End-to-End Preparation & Smoke Test
+
+You can run the end-to-end data preparation (Corpus -> Tokenizer -> RDE) and a CPU smoke test using convenience scripts:
+
+```bash
+# 1. Prepare 30M training data (corpus build -> tokenizer train -> RDS build)
+./scripts/prepare_30m_data.sh raw_repos rds_out
+
+# 2. Run a CPU smoke test (train ryth_30m for 20 steps)
+./scripts/smoke_test.sh rds_out runs/ryth_smoke
+
+# 3. Generate code from your trained checkpoint
+python scripts/generate.py \
+    --checkpoint runs/ryth_smoke/final.pt \
+    --tokenizer tok/tokenizer.json \
+    --prompt "def add(a, b):" \
+    --temperature 0.8 \
+    --top_k 40 \
+    --max_new_tokens 100
+```
+
 ## 3. Get some code to train on
 
 RDE accepts **either** input layout:
@@ -151,7 +172,21 @@ ryth-train --data_dir rds_out --resume latest
 > smoke-testing the pipeline; use a GPU for real runs. Full details:
 > [training.md](training.md).
 
-## 9. Run the examples / tests
+## 9. Code Generation
+
+Generate code from a trained checkpoint using `scripts/generate.py`:
+
+```bash
+python scripts/generate.py \
+    --checkpoint runs/ryth/final.pt \
+    --tokenizer tok/tokenizer.json \
+    --prompt "def fibonacci(n):" \
+    --temperature 0.8 \
+    --top_k 40 \
+    --max_new_tokens 100
+```
+
+## 10. Run the examples / tests
 
 ```bash
 python examples/example_train_tokenizer.py
