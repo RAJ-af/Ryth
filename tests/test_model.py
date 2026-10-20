@@ -6,11 +6,10 @@ Run:  pytest tests/test_model.py -v   (or: python tests/test_model.py)
 
 import os
 import sys
-import pytest
-
-torch = pytest.importorskip("torch")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import torch
 
 from model import RythConfig
 

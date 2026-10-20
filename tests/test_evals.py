@@ -11,8 +11,6 @@ import tempfile
 
 import pytest
 
-torch = pytest.importorskip("torch")
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "scripts"))
@@ -159,6 +157,8 @@ def test_load_problems_missing_key_raises(tmpdir):
 # --------------------------------------------------------------------- #
 # generation — ckpt loading + sampling (torch)
 # --------------------------------------------------------------------- #
+
+import torch
 
 from model import RythConfig, RythForCausalLM
 from model.checkpoint import save_checkpoint
