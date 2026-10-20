@@ -7,10 +7,12 @@ Built module-by-module with REAL PyTorch. Run:
 import math
 import os
 import sys
+import pytest
+
+torch = pytest.importorskip("torch")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import torch
 import torch.nn as nn
 
 from training.config import TrainConfig
@@ -302,7 +304,7 @@ def test_logger_writes_jsonl():
 from training.checkpoint import CheckpointManager, experiment_metadata
 
 
-def test_experiment_metadata_fields():
+def test_checkpoint_experiment_metadata_fields():
     meta = experiment_metadata(_train_cfg(), model_version="0.2.0",
                                tokenizer_hash="abc", dataset_version="1.0", rds_version=1)
     for k in ["git_commit", "torch_version", "tokenizer_hash", "dataset_version",

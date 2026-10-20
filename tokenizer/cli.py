@@ -9,6 +9,7 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .bpe import BPETokenizer
@@ -26,7 +27,8 @@ def _cmd_train(args):
         return 1
     total = sum(len(t) for t in texts)
     print(f"corpus: {len(texts)} documents, {total:,} chars")
-    train_tokenizer(texts, vocab_size=args.vocab, out_dir=args.out, verbose=True)
+    train_tokenizer(texts, vocab_size=args.vocab, out_dir=args.out, verbose=True,
+                    workers=args.workers, max_bytes=args.max_bytes)
     return 0
 
 
@@ -64,6 +66,10 @@ def build_parser():
                    help="glob for plain text/code files (e.g. 'src/**/*.py')")
     p.add_argument("--vocab", type=int, default=1024, help="target vocab size")
     p.add_argument("--out", default="tokenizer_out", help="output folder")
+    p.add_argument("--workers", type=int, default=os.cpu_count() or 1,
+                   help="number of worker processes for pre-tokenization")
+    p.add_argument("--max_bytes", "--max-bytes", dest="max_bytes", type=int, default=None,
+                   help="maximum corpus size in bytes to use for training")
     p.set_defaults(func=_cmd_train)
 
     p = sub.add_parser("encode", help="encode text to token ids")

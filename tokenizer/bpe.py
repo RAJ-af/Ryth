@@ -57,13 +57,16 @@ class BPETokenizer:
     # ------------------------------------------------------------------ #
     # TRAINING
     # ------------------------------------------------------------------ #
-    def train(self, texts, vocab_size, verbose=False):
-        """`texts` (strings ka iterable) se BPE merges seekho jab tak vocab_size na aaye."""
+    def _train_naive(self, texts, vocab_size, verbose=False, max_bytes=None):
+        """Reference naive BPE trainer O(merges x corpus) for testing/parity verification."""
         assert vocab_size >= 256, "vocab_size kam se kam 256 (base bytes) hona chahiye"
         num_merges = vocab_size - 256
 
+        if max_bytes is not None and max_bytes > 0:
+            from tokenizer.fast_bpe import cap_texts_by_bytes
+            texts = cap_texts_by_bytes(texts, max_bytes)
+
         # har text ko regex se pieces me todo, phir har piece ko bytes ki list me.
-        # chunks = pieces ki list; har piece token-ids ki list (shuru me raw bytes).
         chunks = []
         for text in texts:
             for piece in _SPLIT_PATTERN.findall(text):
@@ -97,6 +100,15 @@ class BPETokenizer:
 
         self.merges = merges
         self.vocab = vocab
+        return self
+
+    def train(self, texts, vocab_size, verbose=False, workers=None, max_bytes=None):
+        """`texts` (strings ka iterable) se BPE merges seekho jab tak vocab_size na aaye."""
+        from tokenizer.fast_bpe import train_fast
+        tok = train_fast(texts, vocab_size=vocab_size, verbose=verbose,
+                         workers=workers, max_bytes=max_bytes)
+        self.merges = tok.merges
+        self.vocab = tok.vocab
         return self
 
     # ------------------------------------------------------------------ #

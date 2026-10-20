@@ -255,6 +255,7 @@ def test_b1_without_cuda_is_runtimeerror(tmp_path, monkeypatch):
     import types
     fake_torch = types.ModuleType("torch")
     fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
     cells = dict(enumerate(_lazy_cells()))
     with pytest.raises(RuntimeError, match="CUDA"):
         _run_cell(cells[5][1], tmp_path, monkeypatch,

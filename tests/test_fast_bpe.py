@@ -43,8 +43,8 @@ REAL_MIXED = [
 
 
 def test_exact_parity_real_mixed_text():
-    tok_n = BPETokenizer().train(list(REAL_MIXED), vocab_size=700)
-    tok_f = train_fast(list(REAL_MIXED), vocab_size=700)
+    tok_n = BPETokenizer()._train_naive(list(REAL_MIXED), vocab_size=700)
+    tok_f = BPETokenizer().train(list(REAL_MIXED), vocab_size=700)
     _assert_identical(tok_n, tok_f)
     assert len(tok_f.merges) > 200              # kaafi merges hue — real exercise
 
@@ -52,7 +52,7 @@ def test_exact_parity_real_mixed_text():
 def test_exact_parity_heavy_ties():
     # do SAME-frequency bigrams — tie-break corpus-order pehle wala chune
     tied = ("AB " * 60 + "CD " * 60) * 3
-    tok_n = BPETokenizer().train([tied], vocab_size=400)
+    tok_n = BPETokenizer()._train_naive([tied], vocab_size=400)
     tok_f = train_fast([tied], vocab_size=400)
     _assert_identical(tok_n, tok_f)
     # pehla merge (A,B) hona chahiye — scan-order pehla
@@ -61,14 +61,14 @@ def test_exact_parity_heavy_ties():
 
     # aur bhi adversarial: barabar counts, interleaved
     adv = "xyxy zxzy wxwx qxqx " * 40
-    tok_n2 = BPETokenizer().train([adv], vocab_size=350)
+    tok_n2 = BPETokenizer()._train_naive([adv], vocab_size=350)
     tok_f2 = train_fast([adv], vocab_size=350)
     _assert_identical(tok_n2, tok_f2)
 
 
 def test_early_stop_parity_tiny_corpus():
     tiny = ["ha ha ha"]
-    tok_n = BPETokenizer().train(tiny, vocab_size=500)   # kabhi 500 nahi pahunchega
+    tok_n = BPETokenizer()._train_naive(tiny, vocab_size=500)   # kabhi 500 nahi pahunchega
     tok_f = train_fast(tiny, vocab_size=500)
     _assert_identical(tok_n, tok_f)
     assert len(tok_f.merges) < 100                   # dono ne wahi early-stop kiya
@@ -76,7 +76,7 @@ def test_early_stop_parity_tiny_corpus():
 
 def test_empty_and_single_piece_inputs():
     for texts in ([], [""], ["x"], ["onlyone"]):
-        tok_n = BPETokenizer().train(texts, vocab_size=300)
+        tok_n = BPETokenizer()._train_naive(texts, vocab_size=300)
         tok_f = train_fast(texts, vocab_size=300)
         _assert_identical(tok_n, tok_f)
 
@@ -104,6 +104,21 @@ def test_fast_result_roundtrips_through_save_load(tmp_path):
 
 def test_exact_parity_larger_vocab_stress():
     """Zyada merges = zyada tie-cascade chances — parity wahan bhi kaape."""
-    tok_n = BPETokenizer().train(list(REAL_MIXED), vocab_size=1200)
+    tok_n = BPETokenizer()._train_naive(list(REAL_MIXED), vocab_size=1200)
     tok_f = train_fast(list(REAL_MIXED), vocab_size=1200)
     _assert_identical(tok_n, tok_f)
+
+
+def test_multiprocessing_workers_parity():
+    """Multiprocessing workers produce identical merges to single-process training."""
+    tok_w1 = BPETokenizer().train(list(REAL_MIXED), vocab_size=700, workers=1)
+    tok_w2 = BPETokenizer().train(list(REAL_MIXED), vocab_size=700, workers=2)
+    _assert_identical(tok_w1, tok_w2)
+
+
+def test_max_bytes_option():
+    """max_bytes caps the corpus size during training and produces identical output to truncated input."""
+    full_text = list(REAL_MIXED)
+    tok_capped = BPETokenizer().train(full_text, vocab_size=500, max_bytes=1000)
+    tok_naive_capped = BPETokenizer()._train_naive(full_text, vocab_size=500, max_bytes=1000)
+    _assert_identical(tok_naive_capped, tok_capped)
