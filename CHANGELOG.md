@@ -3,6 +3,18 @@
 All notable changes to Ryth are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — Extensible BPE Tokenizer (v2) — 2026-07-07
+
+Extensible Byte-Pair Encoding (BPE) tokenizer supporting vocabulary extension, reserved special token slots, script-aware pre-tokenization, Unicode NFC normalization, and reproducible sha256 checksums.
+
+- **Tokenizer Version 2** — Bumped tokenizer version to `2`. **Breaking change**: Default `--reserved 256` special token slots shift special token IDs relative to v0.3.x tokenizers, making old model checkpoints trained with v0.3.x tokenizers incompatible.
+- **Reserved Special Tokens** — Added `--reserved N` (default 256) to `ryth-tokenizer train`, creating `<|reserved_0|>`...`<|reserved_{N-1}|>` slots at fixed sequential IDs before chat/FIM special tokens.
+- **Incremental Vocab Extension (`extend`)** — Added `ryth-tokenizer extend --base tok/tokenizer.json --files '<glob>' --add_vocab N --out tok_v2` and `BPETokenizer.extend()`. All existing merges and token IDs remain 100% identical; new merges are learned only from the new corpus and appended above existing IDs.
+- **Unicode NFC Normalization** — Applied `unicodedata.normalize("NFC", ...)` during `train` and `encode`. `decode()` does not normalize and joins raw byte tokens, ensuring exact roundtrip `decode(encode(x)) == NFC(x)`.
+- **Script-Aware Devanagari Pre-tokenization** — Enhanced regex pre-tokenizer to keep Devanagari words intact with combining marks (matras, virama, nukta, anusvara) and ZWJ/ZWNJ (`\u200d`/`\u200c`), while excluding danda (`।`) and double danda (`॥`) into separate punctuation tokens.
+- **JSON Checksum Verification** — Included `version` and `sha256` fields in `tokenizer.json`. `BPETokenizer.load()` automatically verifies the content hash (excluding the `sha256` key itself) and raises a `ValueError` on tampering, while maintaining backward compatibility for older v1 `tokenizer.json` files.
+- **Tokenizer Metrics Script** — Added `scripts/tokenizer_report.py` to evaluate and report tokens-per-word and bytes-per-token metrics for English, Hindi, Hinglish, and Python code.
+
 ## [0.3.2] — Fast BPE Tokenizer Trainer — 2026-07-06
 
 Optimized Byte-Pair Encoding (BPE) tokenizer training in pure Python standard library (~300x faster).

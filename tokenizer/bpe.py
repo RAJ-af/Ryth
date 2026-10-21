@@ -14,15 +14,16 @@ BPE ka idea (bahut simple):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import unicodedata
 
-# GPT-2 style pre-tokenization pattern (stdlib `re` version, ASCII-friendly — code
-# ke liye kaafi hai). Ye text ko words/numbers/spaces me todta hai TAKI merges
-# word ke aar-paar (jaise space ke across) na hon -> behtar tokens.
-# Full-Unicode chahiye to `pip install regex` karke \p{L}\p{N} wala pattern use karo.
+# GPT-2 style pre-tokenization pattern + Devanagari script awareness.
+# Devanagari words include combining marks (matras, virama, nukta, anusvara), digits,
+# and ZWJ/ZWNJ (\u200d, \u200c), while excluding danda (\u0964) and double danda (\u0965).
 _SPLIT_PATTERN = re.compile(
-    r"""'(?:[sdmt]|ll|ve|re)| ?[A-Za-z]+| ?[0-9]+| ?[^\sA-Za-z0-9]+|\s+(?!\S)|\s+"""
+    r"""'(?:[sdmt]|ll|ve|re)| ?[A-Za-z]+| ?[\u0900-\u0963\u0966-\u097f\u200c\u200d]+| ?[0-9]+| ?[^\sA-Za-z0-9\u0900-\u0963\u0966-\u097f\u200c\u200d]+|\s+(?!\S)|\s+"""
 )
 
 
@@ -49,6 +50,8 @@ def _merge(ids, pair, new_id):
 
 class BPETokenizer:
     def __init__(self):
+        self.version: int = 2
+        self.sha256: str = ""
         self.merges: dict[tuple[int, int], int] = {}   # (a,b) -> new_id  (learning order)
         self.vocab: dict[int, bytes] = {}              # id -> raw bytes
         self.special_tokens: dict[str, int] = {}       # "<|fim_prefix|>" -> id
@@ -66,10 +69,11 @@ class BPETokenizer:
             from tokenizer.fast_bpe import cap_texts_by_bytes
             texts = cap_texts_by_bytes(texts, max_bytes)
 
-        # har text ko regex se pieces me todo, phir har piece ko bytes ki list me.
+        # har text ko NFC normalize karo aur regex se pieces me todo
         chunks = []
         for text in texts:
-            for piece in _SPLIT_PATTERN.findall(text):
+            norm_text = unicodedata.normalize("NFC", text)
+            for piece in _SPLIT_PATTERN.findall(norm_text):
                 b = piece.encode("utf-8")
                 if b:
                     chunks.append(list(b))
@@ -111,6 +115,19 @@ class BPETokenizer:
         self.vocab = tok.vocab
         return self
 
+    def extend(self, texts, add_vocab: int, verbose=False, workers=None, max_bytes=None):
+        """Existing merges aur special tokens ko badle bina naye texts se BPE merges seekho aur append karo."""
+        from tokenizer.fast_bpe import extend_fast
+        tok = extend_fast(self, texts, add_vocab=add_vocab, verbose=verbose,
+                          workers=workers, max_bytes=max_bytes)
+        self.merges = tok.merges
+        self.vocab = tok.vocab
+        self.special_tokens = tok.special_tokens
+        self._inv_special = tok._inv_special
+        self.version = tok.version
+        self.sha256 = tok.sha256
+        return self
+
     # ------------------------------------------------------------------ #
     # SPECIAL TOKENS  (FIM / chat tokens — inhe kabhi tode nahi jaana chahiye)
     # ------------------------------------------------------------------ #
@@ -142,6 +159,7 @@ class BPETokenizer:
 
     def encode(self, text):
         """String ko token ids me badlo. Special tokens ko tode bina alag rakhta hai."""
+        text = unicodedata.normalize("NFC", text)
         if self.special_tokens:
             # special tokens ke around split karo (unhe as-is rakho)
             pattern = "(" + "|".join(re.escape(k) for k in self.special_tokens) + ")"
@@ -179,9 +197,23 @@ class BPETokenizer:
     def vocab_size(self):
         return len(self.vocab) + len(self.special_tokens)
 
-    def save(self, path):
-        """Tokenizer ko ek JSON file me save karo (merges + special tokens)."""
+    def compute_hash(self) -> str:
+        """Compute sha256 hex digest over JSON content excluding the sha256 field itself."""
         data = {
+            "version": self.version,
+            "type": "bpe-byte-level",
+            "merges": [[a, b, idx] for (a, b), idx in self.merges.items()],
+            "special_tokens": self.special_tokens,
+        }
+        dump_str = json.dumps(data, indent=1, sort_keys=True)
+        return hashlib.sha256(dump_str.encode("utf-8")).hexdigest()
+
+    def save(self, path):
+        """Tokenizer ko ek JSON file me save karo (version + sha256 + merges + special tokens)."""
+        self.sha256 = self.compute_hash()
+        data = {
+            "version": self.version,
+            "sha256": self.sha256,
             "type": "bpe-byte-level",
             "merges": [[a, b, idx] for (a, b), idx in self.merges.items()],
             "special_tokens": self.special_tokens,
@@ -193,15 +225,27 @@ class BPETokenizer:
     def load(cls, path):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
+
+        if "sha256" in data:
+            data_without_sha = {k: v for k, v in data.items() if k != "sha256"}
+            dump_str = json.dumps(data_without_sha, indent=1, sort_keys=True)
+            expected_sha = hashlib.sha256(dump_str.encode("utf-8")).hexdigest()
+            if data["sha256"] != expected_sha:
+                raise ValueError(
+                    f"tokenizer sha256 mismatch: expected {expected_sha}, got {data['sha256']}"
+                )
+
         tok = cls()
+        tok.version = data.get("version", 1)
         # base vocab
         tok.vocab = {i: bytes([i]) for i in range(256)}
         # merges ko order me rebuild karo (vocab bhi saath saath ban jaata hai)
-        merges_sorted = sorted(data["merges"], key=lambda x: x[2])
+        merges_sorted = sorted(data.get("merges", []), key=lambda x: x[2])
         for a, b, idx in merges_sorted:
             tok.merges[(a, b)] = idx
             tok.vocab[idx] = tok.vocab[a] + tok.vocab[b]
-        for t, idx in data["special_tokens"].items():
+        for t, idx in data.get("special_tokens", {}).items():
             tok.special_tokens[t] = idx
             tok._inv_special[idx] = t
+        tok.sha256 = data.get("sha256", "")
         return tok

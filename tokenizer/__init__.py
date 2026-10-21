@@ -19,4 +19,16 @@ DEFAULT_SPECIAL_TOKENS = [
     "<|system|>", "<|user|>", "<|assistant|>", "<|end|>",
 ]
 
-__all__ = ["BPETokenizer", "DEFAULT_SPECIAL_TOKENS"]
+
+def build_special_tokens(reserved: int = 256,
+                         extra_specials: list[str] | None = None) -> list[str]:
+    """Build list of special tokens starting with <|reserved_0|>...<|reserved_{reserved-1}|>."""
+    res = [f"<|reserved_{i}|>" for i in range(reserved)]
+    if extra_specials is not None:
+        res.extend(extra_specials)
+    else:
+        res.extend(DEFAULT_SPECIAL_TOKENS)
+    return res
+
+
+__all__ = ["BPETokenizer", "DEFAULT_SPECIAL_TOKENS", "build_special_tokens"]

@@ -13,7 +13,7 @@ import os
 import sys
 
 from .bpe import BPETokenizer
-from .train import iter_jsonl_corpus, iter_text_files, train_tokenizer
+from .train import extend_tokenizer, iter_jsonl_corpus, iter_text_files, train_tokenizer
 
 
 def _cmd_train(args):
@@ -28,7 +28,26 @@ def _cmd_train(args):
     total = sum(len(t) for t in texts)
     print(f"corpus: {len(texts)} documents, {total:,} chars")
     train_tokenizer(texts, vocab_size=args.vocab, out_dir=args.out, verbose=True,
-                    workers=args.workers, max_bytes=args.max_bytes)
+                    workers=args.workers, max_bytes=args.max_bytes,
+                    reserved=args.reserved)
+    return 0
+
+
+def _cmd_extend(args):
+    if args.files:
+        texts = list(iter_text_files(args.files))
+    elif args.data:
+        texts = list(iter_jsonl_corpus(args.data))
+    else:
+        texts = []
+    if not texts:
+        print("error: no corpus text found "
+              "(--files '<glob>' ya --data <jsonl dir> do)", file=sys.stderr)
+        return 1
+    total = sum(len(t) for t in texts)
+    print(f"extending corpus: {len(texts)} documents, {total:,} chars")
+    extend_tokenizer(args.base, texts, add_vocab=args.add_vocab, out_dir=args.out,
+                     verbose=True, workers=args.workers, max_bytes=args.max_bytes)
     return 0
 
 
@@ -66,11 +85,27 @@ def build_parser():
                    help="glob for plain text/code files (e.g. 'src/**/*.py')")
     p.add_argument("--vocab", type=int, default=1024, help="target vocab size")
     p.add_argument("--out", default="tokenizer_out", help="output folder")
+    p.add_argument("--reserved", type=int, default=256,
+                   help="number of reserved special token slots")
     p.add_argument("--workers", type=int, default=os.cpu_count() or 1,
                    help="number of worker processes for pre-tokenization")
     p.add_argument("--max_bytes", "--max-bytes", dest="max_bytes", type=int, default=None,
                    help="maximum corpus size in bytes to use for training")
     p.set_defaults(func=_cmd_train)
+
+    p = sub.add_parser("extend", help="extend an existing BPE tokenizer with new merges")
+    p.add_argument("--base", required=True, help="path to base tokenizer.json")
+    p.add_argument("--files", default=None,
+                   help="glob for plain text/code files (e.g. 'src/**/*.py')")
+    p.add_argument("--data", default=None, help="jsonl corpus folder")
+    p.add_argument("--add_vocab", "--add-vocab", dest="add_vocab", type=int, required=True,
+                   help="number of new merge tokens to learn")
+    p.add_argument("--out", required=True, help="output folder (e.g. tok_v2)")
+    p.add_argument("--workers", type=int, default=os.cpu_count() or 1,
+                   help="number of worker processes for pre-tokenization")
+    p.add_argument("--max_bytes", "--max-bytes", dest="max_bytes", type=int, default=None,
+                   help="maximum corpus size in bytes to use for training")
+    p.set_defaults(func=_cmd_extend)
 
     p = sub.add_parser("encode", help="encode text to token ids")
     p.add_argument("--tokenizer", required=True, help="tokenizer.json path")
