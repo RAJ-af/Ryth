@@ -33,6 +33,10 @@ End-to-end data preparation, CPU smoke testing, and generation scripts for the 3
 - **`scripts/smoke_test.sh`** — CPU smoke test script wrapping `ryth-train` for 20 steps to confirm training pipeline integrity and loss decrease.
 - **`scripts/generate.py`** — Inference generation CLI loading checkpoint (`final.pt`) + tokenizer (`tokenizer.json`) with configurable prompt, temperature, top-k, max new tokens, and auto device selection.
 
+## [Unreleased]
+
+- **RDE Plain-Text Mode (`build-text`)** — Added plain-text mode to the Ryth Data Engine (`dataset/text_pipeline.py` and `ryth-rde build-text <input_dir> <out_dir>`) for building RDS datasets from prose / non-code `.txt` files. Bypasses code-specific cleaners/validators/quality filters while keeping NFC normalization, exact duplicate removal by SHA-256 hash, and dropping documents shorter than 50 characters. Documents are split by `<|endoftext|>`, deterministically partitioned into train and validation splits by hash (`--val_frac`), upsampled/downsampled by source file stem via `--mix`, and packed with `<|endoftext|>` sentinel IDs. Manifests record token counts per source.
+
 ## [Unreleased] — End-to-end notebook (official entry point) — 2026-07-06
 
 The canonical "Run All" notebook for Ryth — one file that takes a raw code

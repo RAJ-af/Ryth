@@ -18,6 +18,7 @@ import sys
 from .config import RDEConfig
 from .dataset import RDSDataset
 from .pipeline import RDEPipeline, EmptyDatasetError
+from .text_pipeline import TextPipeline
 from .tokenizer_adapter import ByteTokenizer, load_bpe_tokenizer
 
 
@@ -26,6 +27,20 @@ def _load_tokenizer(path):
 
 
 # --------------------------------------------------------------------------- #
+def _parse_mix_arg(mix_str: str | None) -> dict[str, float]:
+    if not mix_str:
+        return {}
+    res = {}
+    for item in mix_str.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" in item:
+            k, v = item.split("=", 1)
+            res[k.strip()] = float(v.strip())
+    return res
+
+
 def _cmd_build(args):
     tok = _load_tokenizer(args.tokenizer)
     cfg = RDEConfig(seq_len=args.seq_len, vocab_size=tok.vocab_size,
@@ -34,6 +49,20 @@ def _cmd_build(args):
         RDEPipeline(tok, cfg).run(args.root, args.out, verbose=True,
                                   debug=args.debug)
     except EmptyDatasetError as exc:
+        print(f"\nerror: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _cmd_build_text(args):
+    tok = _load_tokenizer(args.tokenizer)
+    cfg = RDEConfig(seq_len=args.seq_len, vocab_size=tok.vocab_size,
+                    shard_max_bytes=args.shard_mb * 1024 * 1024)
+    mix_dict = _parse_mix_arg(args.mix)
+    try:
+        TextPipeline(tok, cfg, val_frac=args.val_frac, mix=mix_dict).run(
+            args.input_dir, args.out_dir, verbose=True)
+    except Exception as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
         return 2
     return 0
@@ -113,6 +142,20 @@ def build_parser():
                    help="print every pipeline stage (discovery, cleaner, "
                         "validator, language, encoder, chunker)")
     p.set_defaults(func=_cmd_build)
+
+    p = sub.add_parser("build-text", help="build an RDS dataset from prose/plain-text files")
+    p.add_argument("input_dir", help="input directory containing *.txt files")
+    p.add_argument("out_dir", help="output dataset folder")
+    p.add_argument("--tokenizer", default=None,
+                   help="BPE tokenizer.json (default: byte-level)")
+    p.add_argument("--seq_len", type=int, default=1024,
+                   help="chunk length in tokens (default: 1024)")
+    p.add_argument("--val_frac", type=float, default=0.01,
+                   help="validation split fraction (default: 0.01)")
+    p.add_argument("--mix", default=None,
+                   help="mix spec by source stem, e.g. hi=1.0,en=1.0,stories=0.3")
+    p.add_argument("--shard_mb", type=int, default=256, help="shard size (MB)")
+    p.set_defaults(func=_cmd_build_text)
 
     p = sub.add_parser("inspect", help="inspect a dataset / chunk")
     p.add_argument("data_dir")
