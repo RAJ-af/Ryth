@@ -32,10 +32,11 @@ from .dataset import RDSDataset
 from .lock import build_lock, verify_lock, tokenizer_hash
 from .pipeline import RDEPipeline, EmptyDatasetError
 from .rds import RDSReader, ShardWriter, SUPPORTED_VERSIONS
+from .text_pipeline import TextPipeline
 from .tokenizer_adapter import ByteTokenizer, load_bpe_tokenizer
 
 __all__ = [
-    "RDEConfig", "RDEPipeline", "EmptyDatasetError",
+    "RDEConfig", "RDEPipeline", "TextPipeline", "EmptyDatasetError",
     "RDSDataset", "RDSReader", "ShardWriter",
     "ByteTokenizer", "load_bpe_tokenizer", "SUPPORTED_VERSIONS",
     "build_lock", "verify_lock", "tokenizer_hash",

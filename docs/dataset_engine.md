@@ -150,11 +150,28 @@ All behavior is controlled by `RDEConfig` (`config.py`). Common fields:
 `dedup_files`, `dedup_chunks`, `fim_enabled`, `fim_rate`, `dataset_version`,
 `model_version`, `seed`. See [configs/](../configs) for reference values.
 
+## Plain-text mode (`build-text`)
+For prose / non-code datasets (e.g. stories, multilingual prose), RDE provides plain-text mode via `TextPipeline` / `ryth-rde build-text`.
+
+It bypasses code-specific cleaner/validator/quality filters and applies:
+- Unicode NFC normalization
+- Filters out documents shorter than 50 characters
+- Exact duplicate removal by document SHA-256 hash
+- Documents separated by literal `<|endoftext|>` in `.txt` files
+- `--mix` source ratio upsampling/downsampling by file stem (e.g., `--mix hi=1.0,en=1.0,stories=0.3`)
+- Deterministic train / val split by document hash (`--val_frac 0.01`)
+- Token manifest with per-source token counts (`tokens_per_source`)
+
+```bash
+ryth-rde build-text raw_txt_dir rds_out --tokenizer tok/tokenizer.json --seq_len 1024 --val_frac 0.01 --mix hi=1.0,en=1.0,stories=0.3
+```
+
 ## CLI
 ```bash
-ryth-rde build   raw_repos rds_out --tokenizer tok/tokenizer.json --seq_len 1024
-ryth-rde verify  rds_out
-ryth-rde inspect rds_out --chunk 0 --decode --tokenizer tok/tokenizer.json
-ryth-rde stats   rds_out
-ryth-rde manifest rds_out
+ryth-rde build      raw_repos rds_out --tokenizer tok/tokenizer.json --seq_len 1024
+ryth-rde build-text raw_txt_dir rds_out --tokenizer tok/tokenizer.json --seq_len 1024 --val_frac 0.01
+ryth-rde verify     rds_out
+ryth-rde inspect    rds_out --chunk 0 --decode --tokenizer tok/tokenizer.json
+ryth-rde stats      rds_out
+ryth-rde manifest   rds_out
 ```
