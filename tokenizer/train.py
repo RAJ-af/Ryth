@@ -12,7 +12,8 @@ import json
 import os
 
 from .bpe import BPETokenizer
-from . import DEFAULT_SPECIAL_TOKENS
+from .fast_bpe import extend_fast
+from . import DEFAULT_SPECIAL_TOKENS, build_special_tokens
 
 
 def iter_jsonl_corpus(data_dir: str):
@@ -53,9 +54,11 @@ def iter_text_files(pattern: str):
 def train_tokenizer(texts, vocab_size: int, out_dir: str, *,
                     special_tokens=None, verbose: bool = False,
                     workers: int | None = None,
-                    max_bytes: int | None = None) -> BPETokenizer:
+                    max_bytes: int | None = None,
+                    reserved: int = 256) -> BPETokenizer:
     """Train a BPE tokenizer on `texts` and save to `out_dir/tokenizer.json`."""
-    special_tokens = special_tokens or DEFAULT_SPECIAL_TOKENS
+    if special_tokens is None:
+        special_tokens = build_special_tokens(reserved=reserved)
     tok = BPETokenizer()
     tok.train(list(texts), vocab_size=vocab_size, verbose=verbose,
               workers=workers, max_bytes=max_bytes)
@@ -66,5 +69,26 @@ def train_tokenizer(texts, vocab_size: int, out_dir: str, *,
     tok.save(path)
     if verbose:
         print(f"learned {len(tok.merges)} merges | vocab_size = {tok.vocab_size}")
+        print(f"saved -> {path}")
+    return tok
+
+
+def extend_tokenizer(base: str | BPETokenizer, texts, add_vocab: int, out_dir: str, *,
+                     verbose: bool = False, workers: int | None = None,
+                     max_bytes: int | None = None) -> BPETokenizer:
+    """Load base tokenizer, continue BPE training on `texts`, and save to `out_dir/tokenizer.json`."""
+    if isinstance(base, str):
+        base_tok = BPETokenizer.load(base)
+    else:
+        base_tok = base
+
+    tok = extend_fast(base_tok, texts, add_vocab=add_vocab, verbose=verbose,
+                      workers=workers, max_bytes=max_bytes)
+
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "tokenizer.json")
+    tok.save(path)
+    if verbose:
+        print(f"added {len(tok.merges) - len(base_tok.merges)} new merges | vocab_size = {tok.vocab_size}")
         print(f"saved -> {path}")
     return tok

@@ -29,6 +29,7 @@ from __future__ import annotations
 import heapq
 import multiprocessing
 import os
+import unicodedata
 from typing import Iterable
 
 from tokenizer.bpe import _SPLIT_PATTERN, BPETokenizer
@@ -68,7 +69,8 @@ def _process_text_batch(batch: list[str]) -> tuple[dict[bytes, int], list[bytes]
     counts: dict[bytes, int] = {}
     first_seen: list[bytes] = []
     for text in batch:
-        for piece in _SPLIT_PATTERN.findall(text):
+        norm_text = unicodedata.normalize("NFC", text)
+        for piece in _SPLIT_PATTERN.findall(norm_text):
             b = piece.encode("utf-8")
             if not b:
                 continue
@@ -88,7 +90,8 @@ def _build_chunks(texts, workers: int | None = None) -> list[_Chunk]:
         seen: dict[bytes, _Chunk] = {}
         chunks: list[_Chunk] = []
         for text in texts:
-            for piece in _SPLIT_PATTERN.findall(text):
+            norm_text = unicodedata.normalize("NFC", text)
+            for piece in _SPLIT_PATTERN.findall(norm_text):
                 b = piece.encode("utf-8")
                 if not b:
                     continue
@@ -273,4 +276,164 @@ def train_fast(texts, vocab_size, verbose=False, checkpoint_path=None,
     tok = BPETokenizer()
     tok.merges = merges
     tok.vocab = vocab
+    return tok
+
+
+def extend_fast(base_tok: BPETokenizer, texts, add_vocab: int, verbose=False,
+                checkpoint_path=None, checkpoint_every=2000, workers=None, max_bytes=None) -> BPETokenizer:
+    """Existing merges aur special tokens ko badle bina naye texts se BPE merges seekho aur append karo."""
+    if add_vocab <= 0:
+        tok = BPETokenizer()
+        tok.merges = dict(base_tok.merges)
+        tok.vocab = dict(base_tok.vocab)
+        tok.special_tokens = dict(base_tok.special_tokens)
+        tok._inv_special = dict(base_tok._inv_special)
+        tok.version = base_tok.version
+        tok.sha256 = tok.compute_hash()
+        return tok
+
+    if max_bytes is not None and max_bytes > 0:
+        texts = cap_texts_by_bytes(texts, max_bytes)
+
+    chunks = _build_chunks(texts, workers=workers)
+    for ch in chunks:
+        ch.ids = base_tok._encode_piece(ch.ids)
+
+    merges = dict(base_tok.merges)
+    vocab = dict(base_tok.vocab)
+
+    max_vocab_id = max(vocab.keys()) if vocab else 255
+    max_special_id = max(base_tok._inv_special.keys()) if base_tok._inv_special else 0
+    start_id = max(max_vocab_id, max_special_id) + 1
+
+    counts: dict[tuple[int, int], int] = {}
+    where: dict[tuple[int, int], set[int]] = {}
+    for ci, ch in enumerate(chunks):
+        for a, b in zip(ch.ids, ch.ids[1:]):
+            p = (a, b)
+            counts[p] = counts.get(p, 0) + ch.count
+            where.setdefault(p, set()).add(ci)
+
+    seq = 0
+    heap: list[tuple[int, int, tuple[int, int]]] = []
+    for p in counts:
+        heap.append((-counts[p], seq, p))
+        seq += 1
+    heapq.heapify(heap)
+
+    def _touch(p):
+        c = counts.get(p, 0)
+        if c:
+            nonlocal seq
+            heapq.heappush(heap, (-c, seq, p))
+            seq += 1
+
+    def _first_pos(pair) -> tuple[int, int]:
+        best = None
+        for ci in where.get(pair, ()):
+            ids = chunks[ci].ids
+            for off in range(len(ids) - 1):
+                if ids[off] == pair[0] and ids[off + 1] == pair[1]:
+                    cand = (ci, off)
+                    if best is None or cand < best:
+                        best = cand
+                    break
+        return best if best is not None else (1 << 60, 0)
+
+    def _choose():
+        nonlocal seq
+        while heap:
+            negc, _, p = heapq.heappop(heap)
+            cur = counts.get(p, 0)
+            if cur == 0 or -negc != cur:
+                continue
+            group = [p]
+            while heap:
+                nxt = heap[0]
+                if nxt[0] == negc:
+                    _, _, q = heapq.heappop(heap)
+                    cq = counts.get(q, 0)
+                    if cq == cur:
+                        group.append(q)
+                    elif cq:
+                        heapq.heappush(heap, (-cq, seq, q))
+                        seq += 1
+                elif counts.get(nxt[2], 0) != -nxt[0]:
+                    heapq.heappop(heap)
+                    continue
+                else:
+                    break
+            winner = min(group, key=_first_pos) if len(group) > 1 else group[0]
+            for q in group:
+                if q is not winner:
+                    heapq.heappush(heap, (-cur, seq, q))
+                    seq += 1
+            return winner, cur
+        return None, 0
+
+    m = 0
+    while m < add_vocab:
+        pair, c = _choose()
+        if pair is None or c < 2:
+            break
+        new_id = start_id + m
+        touched = sorted(where.pop(pair, ()))
+
+        for ci in touched:
+            ch = chunks[ci]
+            for a, b in zip(ch.ids, ch.ids[1:]):
+                p = (a, b)
+                nc = counts[p] - ch.count
+                if nc:
+                    counts[p] = nc
+                    _touch(p)
+                else:
+                    del counts[p]
+                s = where.get(p)
+                if s is not None:
+                    s.discard(ci)
+                    if not s:
+                        del where[p]
+
+            ids, out, i = ch.ids, [], 0
+            L = len(ids)
+            while i < L:
+                if i < L - 1 and ids[i] == pair[0] and ids[i + 1] == pair[1]:
+                    out.append(new_id)
+                    i += 2
+                else:
+                    out.append(ids[i])
+                    i += 1
+            ch.ids = out
+
+            for a, b in zip(out, out[1:]):
+                p = (a, b)
+                counts[p] = counts.get(p, 0) + ch.count
+                where.setdefault(p, set()).add(ci)
+                _touch(p)
+
+        merges[pair] = new_id
+        vocab[new_id] = vocab[pair[0]] + vocab[pair[1]]
+
+        m += 1
+        if verbose and m % 100 == 0:
+            print(f"  extend merge {m}/{add_vocab}: {pair} -> {new_id} "
+                  f"({vocab[new_id]!r}) x{c}", flush=True)
+
+        if checkpoint_path and m % checkpoint_every == 0:
+            part = BPETokenizer()
+            part.merges = dict(merges)
+            part.vocab = dict(vocab)
+            part.special_tokens = dict(base_tok.special_tokens)
+            part._inv_special = dict(base_tok._inv_special)
+            part.version = base_tok.version + 1
+            part.save(checkpoint_path)
+
+    tok = BPETokenizer()
+    tok.merges = merges
+    tok.vocab = vocab
+    tok.special_tokens = dict(base_tok.special_tokens)
+    tok._inv_special = dict(base_tok._inv_special)
+    tok.version = base_tok.version + 1
+    tok.sha256 = tok.compute_hash()
     return tok
