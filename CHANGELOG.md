@@ -35,6 +35,13 @@ End-to-end data preparation, CPU smoke testing, and generation scripts for the 3
 
 ## [Unreleased]
 
+- **Supervised Fine-Tuning (SFT) & Chat Pipeline** — Added end-to-end SFT data building, training, generation, and chat loop tools without changing model architecture, RDS format, or existing tokenizer IDs.
+  - **`ryth-sft build <data_dir> <out_dir> --tokenizer tok.json --seq_len 1024 --val_frac 0.05`** — Reads chat `.jsonl` files, applies NFC normalization, tokenizes with registered chat tokens (`<|system|>`, `<|user|>`, `<|assistant|>`, `<|end|>`), generates parallel loss masks (loss calculated strictly on assistant content and `<|end|>` end-of-turn token), packs/pads to `seq_len`, and outputs train/val RDS shards while reporting per-file counts (`en`/`hi`/`hinglish`).
+  - **`ryth-sft train` & Training Engine Extensions** — Initializes model from base weights (`{"model": state_dict, "preset": str, "vocab_size": int, "seq_len": int}`), applies loss mask via `ignore_index = -100` target masking, defaults to lr 5e-5, 3 epochs, 5% warmup, cosine decay, reports validation loss on assistant tokens only, and saves `best.pt`.
+  - **`scripts/chat.py --weights W --tokenizer T`** — Interactive CLI chat loop using the chat template, stopping at `<|end|>`, with flags `--temperature`, `--top_k`, `--max_new_tokens`, `--lang_hint`, and auto device detection.
+  - **`scripts/gen_sft_data.py`** — Stdlib-only tool (`urllib`, `json`) generating chat training data through Gemini or OpenAI-compatible LLM APIs. Enforces Ryth persona, script rules (Devanagari for `hi`, Latin only for `hinglish`/`en`), max 1500 chars limit, question hash deduplication, resume capability, exponential backoff on 429/5xx, and rate limiting (`--rpm`).
+  - **`data/sft/topics_starter.txt`** — Starter topics dataset with ~150 topics across Python, web APIs, SQL, auth, git, debugging, conversation, science, maths, and general knowledge.
+
 - **RDE Plain-Text Mode (`build-text`)** — Added plain-text mode to the Ryth Data Engine (`dataset/text_pipeline.py` and `ryth-rde build-text <input_dir> <out_dir>`) for building RDS datasets from prose / non-code `.txt` files. Bypasses code-specific cleaners/validators/quality filters while keeping NFC normalization, exact duplicate removal by SHA-256 hash, and dropping documents shorter than 50 characters. Documents are split by `<|endoftext|>`, deterministically partitioned into train and validation splits by hash (`--val_frac`), upsampled/downsampled by source file stem via `--mix`, and packed with `<|endoftext|>` sentinel IDs. Manifests record token counts per source.
 
 ## [Unreleased] — End-to-end notebook (official entry point) — 2026-07-06

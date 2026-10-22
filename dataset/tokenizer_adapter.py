@@ -57,6 +57,15 @@ def load_bpe_tokenizer(path: str, version: int = 1):
             self.bos_id = sp.get("<|endoftext|>", self.eos_id)
             self.pad_id = sp.get("<|pad|>", self.eos_id)
 
+        @property
+        def special_tokens(self):
+            return self._t.special_tokens
+
+        def add_special_tokens(self, tokens):
+            res = self._t.add_special_tokens(tokens)
+            self.vocab_size = self._t.vocab_size
+            return res
+
         def encode(self, text): return self._t.encode(text)
         def decode(self, ids): return self._t.decode(list(ids))
 

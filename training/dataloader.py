@@ -25,8 +25,15 @@ class RDSTorchDataset(Dataset):
         return len(self.indices)
 
     def __getitem__(self, i):
-        arr = self.rds[self.indices[i]]              # token ids (mmap, lazy)
+        idx = self.indices[i]
+        arr = self.rds[idx]                          # token ids (mmap, lazy)
         ids = torch.tensor(arr, dtype=torch.long)
+        mask_arr = self.rds.get_mask(idx)
+        if mask_arr is not None:
+            mask = torch.tensor(mask_arr, dtype=torch.long)
+            tgt = ids[1:].clone()
+            tgt[mask[1:] == 0] = -100
+            return ids[:-1], tgt
         return ids[:-1], ids[1:]                     # input, target (shifted)
 
 
