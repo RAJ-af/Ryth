@@ -28,10 +28,16 @@ class RDSDataset:
             self.manifest = json.load(f)
         self.seq_len = self.manifest["seq_len"]
         self._readers: list[RDSReader] = []
+        self._mask_readers: list[RDSReader | None] = []
         self._flat: list[tuple[int, int]] = []       # global idx -> (shard, local idx)
         for si, sh in enumerate(self.manifest["shards"]):
             r = RDSReader(os.path.join(data_dir, sh["file"]))
             self._readers.append(r)
+            mask_fn = sh.get("mask_file")
+            if mask_fn and os.path.exists(os.path.join(data_dir, mask_fn)):
+                self._mask_readers.append(RDSReader(os.path.join(data_dir, mask_fn)))
+            else:
+                self._mask_readers.append(None)
             for li in range(len(r)):
                 self._flat.append((si, li))
 
@@ -41,6 +47,11 @@ class RDSDataset:
     def __getitem__(self, idx: int):
         shard, local = self._flat[idx]
         return self._readers[shard][local]           # array of token ids (lazy, mmap)
+
+    def get_mask(self, idx: int):
+        shard, local = self._flat[idx]
+        mr = self._mask_readers[shard]
+        return mr[local] if mr is not None else None
 
     def meta(self, idx: int) -> dict:
         shard, local = self._flat[idx]
@@ -65,3 +76,6 @@ class RDSDataset:
     def close(self):
         for r in self._readers:
             r.close()
+        for mr in self._mask_readers:
+            if mr is not None:
+                mr.close()

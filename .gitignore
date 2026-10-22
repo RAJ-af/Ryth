@@ -28,6 +28,7 @@ rds_out/
 tokenizer_out/
 tokenizer_custom/
 data/
+!data/sft/topics_starter.txt
 raw_repos/
 ryth_work/
 checkpoints/

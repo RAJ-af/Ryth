@@ -1,0 +1,152 @@
+# Python Basics
+python variables and data types
+python string formatting and methods
+python integer and float arithmetic
+python booleans and logical operators
+python type casting and type checking
+python user input and print formatting
+
+# Python Control Flow
+python if else elif conditional statements
+python for loops and range function
+python while loops and break continue
+python nested loops and loop else clause
+python pass statement and pass by assignment
+
+# Python Data Structures
+python lists methods append extend pop
+python list indexing slicing and sorting
+python list comprehensions and filtering
+python dictionaries keys values items
+python dictionary methods get update pop
+python set operations union intersection difference
+python tuples immutability and unpacking
+python nested dictionaries and lists
+
+# Python Functions & OOP
+python defining functions and def keyword
+python positional and keyword arguments
+python default parameter values
+python args and kwargs variable arguments
+python return statement and multiple return values
+python lambda functions and anonymous functions
+python function scope local and global variables
+python docstrings and function documentation
+python object oriented programming classes and objects
+python class init constructor and self keyword
+python instance attributes vs class attributes
+python inheritance and super method
+python method overriding and polymorphism
+python property decorators getter setter
+python dunder methods str repr len eq
+
+# Python Advanced & Standard Library
+python exception handling try except finally
+python raising exceptions and custom exception classes
+python file handling reading and writing files
+python context managers and with statement
+python modules and import statements
+python standard library math datetime os sys
+python json module serialization and parsing
+python random module sample choice shuffle
+python re module regular expressions matching
+python collections module Counter defaultdict
+python itertools module count cycle combinations
+python functools module lru_cache partial
+python generators and yield keyword
+python iterators and iter next methods
+python decorators and wrapping functions
+
+# APIs & Web Frameworks
+what is an HTTP request and response
+HTTP methods GET POST PUT DELETE PATCH
+HTTP status codes 200 201 400 401 403 404 500
+REST API design principles and resources
+JSON data format for web APIs
+FastAPI framework creating routes and path parameters
+FastAPI request body and Pydantic models
+FastAPI query parameters and validation
+Flask framework basic app and routing
+Flask request handling and JSON responses
+CORS cross origin resource sharing explained
+URL query strings and path parameters
+
+# Databases & SQL
+relational database concepts and tables
+SQL SELECT query filtering with WHERE
+SQL sorting results with ORDER BY
+SQL grouping data with GROUP BY and HAVING
+SQL JOIN inner left right full join
+SQL INSERT INTO updating and deleting records
+SQL PRIMARY KEY and FOREIGN KEY constraints
+SQL database indexes and performance
+SQL transactions COMMIT and ROLLBACK
+ACID properties in database systems
+SQLite python sqlite3 module usage
+
+# Authentication & Security
+authentication vs authorization
+passwords hashing and bcrypt in python
+JSON Web Tokens JWT structure and usage
+session based authentication vs token based
+API keys and secure storage using environment variables
+HTTPS and SSL TLS encryption basics
+SQL injection prevention and parameterized queries
+XSS cross site scripting overview
+
+# Git & Version Control
+git init clone status and log
+git add commit and commit messages
+git branch checkout and switch
+git merge vs git rebase
+git pull and push remotes
+git stash and popping changes
+git resolve merge conflicts
+git log filtering and git diff
+git cherry pick commits
+git reset hard vs soft
+gitignore files and patterns
+
+# Software Engineering & Debugging
+writing clean code and PEP 8 guidelines
+unit testing in python with unittest
+pytest basics and assertion statements
+debugging python code with pdb or print statements
+logging module in python vs print
+code refactoring best practices
+dry principle do not repeat yourself
+solid principles in software design
+
+# Daily Conversation & Advice
+greeting a user and offering coding assistance
+how to start learning python programming
+how to improve problem solving in coding
+tips for debugging broken code
+explaining technical concepts to beginners
+time management tips for developers
+how to read documentation effectively
+
+# Science & Maths
+prime numbers and primality test algorithm
+factorial calculation iterative and recursive
+fibonacci sequence implementation
+even and odd number checking
+gcd greatest common divisor algorithm
+simple interest and compound interest formulas
+mean median mode statistical measures
+conversion between Celsius and Fahrenheit
+basic laws of motion summary
+speed distance time formula and calculation
+binary number system and decimal conversion
+
+# General Knowledge & Linux
+what is an operating system
+linux file system structure root home
+basic linux bash commands ls cd mkdir rm
+linux file permissions chmod chown
+environment variables export and echo
+process management top ps kill
+ssh secure shell remote login basics
+what is DNS and how domain lookup works
+how the internet works IP addresses and routers
+docker containerization basics
