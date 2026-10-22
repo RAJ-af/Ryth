@@ -70,3 +70,11 @@ secrets.local.*
 
 # regenerable held-out text (scripts/w2_baselines.py) — baseline JSONs committed hote hain, ye nahi
 results/val_python.txt
+
+!data/
+data/*
+!data/sft/
+data/sft/*
+!data/sft/topics_starter.txt
+!data/sft/raw/
+!data/sft/merged/
