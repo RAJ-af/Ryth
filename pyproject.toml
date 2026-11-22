@@ -53,7 +53,7 @@ packages = [
     "corpus", "corpus.metadata", "corpus.licenses", "corpus.sources",
     "corpus.download", "corpus.cleaners", "corpus.filters", "corpus.dedup",
     "corpus.quality", "corpus.split", "corpus.tasks", "corpus.exporters",
-    "sft", "sft.tasks",
+    "sft", "sft.tasks", "experiments",
 ]
 
 [tool.pytest.ini_options]

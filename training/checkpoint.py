@@ -1,8 +1,8 @@
 """Checkpoint manager — save / load / auto-resume + experiment tracking.
 
-Ek checkpoint me sab kuch hota hai jisse training bit-for-bit resume ho: model,
-optimizer, step, best_val, RNG states, config, aur experiment metadata (git commit,
-tokenizer hash, dataset version, model version, torch version).
+Checkpoints contain model, optimizer, counters, RNG states and optional scaler and
+train-loader state. Exact continuation additionally requires deterministic kernels,
+an unchanged dataset/configuration, and deterministic dataset items.
 
 `keep_last` se sirf recent N checkpoints disk par rehte hain (space bachao).
 "latest.pt" hamesha newest ki taraf point karta hai (auto-resume ke liye).
@@ -12,7 +12,13 @@ from __future__ import annotations
 
 import glob
 import os
+import random
 import subprocess
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 import torch
 
@@ -51,7 +57,8 @@ class CheckpointManager:
         os.makedirs(out_dir, exist_ok=True)
 
     def save(self, *, model, optimizer, step, best_val, config,
-             metadata: dict | None = None, tag: str | None = None) -> str:
+             metadata: dict | None = None, tag: str | None = None,
+             scaler=None, train_loader_state=None, data_identity=None) -> str:
         state = {
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -59,6 +66,11 @@ class CheckpointManager:
             "best_val": best_val,
             "config": vars(config),
             "metadata": metadata or {},
+            "scaler": scaler.state_dict() if scaler is not None else None,
+            "train_loader_state": train_loader_state,
+            "data_identity": data_identity,
+            "python_rng": random.getstate(),
+            "numpy_rng": np.random.get_state() if np is not None else None,
             "torch_rng": torch.get_rng_state(),
             "cuda_rng": (torch.cuda.get_rng_state_all()
                          if torch.cuda.is_available() else None),
@@ -85,11 +97,21 @@ class CheckpointManager:
             return latest if os.path.exists(latest) else None
         return resume if resume and os.path.exists(resume) else None
 
-    def load(self, path, *, model, optimizer=None, map_location="cpu") -> dict:
+    def load(self, path, *, model, optimizer=None, scaler=None, map_location="cpu",
+             validate=None) -> dict:
         state = torch.load(path, map_location=map_location, weights_only=False)
+        # Validate before mutating the model, optimizer, scaler, or RNG state.
+        if validate is not None:
+            validate(state)
         model.load_state_dict(state["model"])
         if optimizer is not None and state.get("optimizer"):
             optimizer.load_state_dict(state["optimizer"])
+        if scaler is not None and state.get("scaler"):
+            scaler.load_state_dict(state["scaler"])
+        if state.get("python_rng") is not None:
+            random.setstate(state["python_rng"])
+        if np is not None and state.get("numpy_rng") is not None:
+            np.random.set_state(state["numpy_rng"])
         rng = state.get("torch_rng")
         if rng is not None:
             torch.set_rng_state(rng.to("cpu", torch.uint8) if hasattr(rng, "to") else rng)

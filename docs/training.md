@@ -1,7 +1,8 @@
 # Training Engine (v0.3.0)
 
-Pure-PyTorch training for the Ryth model core over RDS datasets. Modular and
-production-quality. Located in the `training/` package.
+Pure-PyTorch training for the Ryth model core over RDS datasets. The single-device
+trainer and opt-in research prototypes are located in `training/` and `experiments/`.
+A 5B-scale training run has not yet been validated.
 
 Install: `pip install -e ".[train]"` (needs PyTorch).
 
@@ -51,7 +52,7 @@ from training import TrainConfig, Trainer
 
 Trainer(TrainConfig(
     data_dir="rds_out",          # RDE output (manifest.json)
-    model_preset="ryth_30m",     # ryth_30m | ryth_125m | ryth_350m | ryth_1b
+    model_preset="ryth_30m",     # ryth_30m | ryth_125m | ryth_350m | ryth_1b | ryth_5b
     seq_len=1024, max_steps=2000,
     micro_batch_size=8, grad_accum_steps=4,   # effective batch 32
     dtype="bf16",
@@ -90,8 +91,11 @@ touching the core library: [`notebooks/ryth_kaggle_train.ipynb`](../notebooks/ry
 
 Each checkpoint stores model + optimizer + step + best_val + RNG states + config +
 **experiment metadata** (git commit, tokenizer hash, dataset version, model
-version, torch version). `keep_last` rotates old checkpoints; `latest.pt` enables
-`--resume latest`. `best.pt` is the best-validation model; `final.pt` at the end.
+version, torch version). New checkpoints additionally store scaler, data identity,
+and consumed sampler position. Exact replay requires the same data/config and
+deterministic kernels/items; callback and metric history are not restored.
+`keep_last` rotates old checkpoints; `latest.pt` enables `--resume latest`.
+`best.pt` is the best-validation model; `final.pt` at the end.
 
 ## Benchmark
 

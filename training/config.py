@@ -66,10 +66,19 @@ class TrainConfig:
     num_workers: int = 2
     run_name: str = "ryth-run"
 
+    # Experimental projected AdamW: select with optimizer="galore". Matrices
+    # whose smaller dimension is <= rank use ordinary full-rank AdamW.
+    galore_rank: int = 128
+    galore_update_interval: int = 200
+    galore_scale: float = 1.0
+
     def __post_init__(self):
         assert self.dtype in ("bf16", "fp16", "fp32"), f"bad dtype {self.dtype}"
         assert self.micro_batch_size >= 1 and self.grad_accum_steps >= 1
         assert self.warmup_steps <= self.max_steps
+        if self.optimizer == "galore":
+            from .galore import _validate
+            _validate(self.galore_rank, self.galore_update_interval, self.galore_scale)
 
     @property
     def effective_batch(self) -> int:
@@ -77,4 +86,5 @@ class TrainConfig:
 
     @property
     def tokens_per_step(self) -> int:
+        """Nominal raw chunk size; runtime metrics count actual shifted inputs."""
         return self.effective_batch * self.seq_len

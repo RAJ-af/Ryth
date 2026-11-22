@@ -50,9 +50,9 @@ Scale the model and dataset; refine curriculum and data mixture.
 A larger coding-focused model built on the same foundation.
 
 ### 5B research and experiments
-See the [5B research index](docs/experiments/README.md) for papers, proposed
-experiments, safety gates and measured-budget guidance. These are research plans,
-not implemented features or evidence of a trained 5B model.
+See the [5B research index](docs/experiments/README.md) for papers, experiment
+plans, safety gates and budget guidance, and [experiment prototypes](experiments/README.md)
+for implemented code and its limitations. No trained 5B result is claimed.
 
 ## RDE v2 (post first-training-run)
 

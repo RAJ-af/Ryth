@@ -1,7 +1,7 @@
 """Ryth model configuration.
 
 Ek single dataclass jo poore model ki shape + behaviour control karti hai. Isi ko
-badal ke aap 30M se 1B tak scale karte ho, aur feature-flags se experiments on/off
+badal ke aap 30M se 5B tak scale karte ho, aur feature-flags se experiments on/off
 karte ho — koi architecture code chhune ki zaroorat nahi.
 """
 
@@ -91,12 +91,12 @@ class RythConfig:
                     2 * d * self.n_kv_heads * self.head_dim +
                     self.n_heads * self.head_dim * d)
         ffn = L * 3 * d * self.ffn_dim
-        norms = L * 2 * d + d
+        norms = L * (2 * d + (2 * self.head_dim if self.use_qk_norm else 0)) + d
         head = 0 if self.tie_embeddings else V * d
         return emb + attn + ffn + norms + head
 
     # ---------------------------------------------------------------- #
-    # Ready-made presets (scale 30M -> 1B). Sirf preset badlo, baaki same.
+    # Ready-made dense presets (30M -> 5B).
     # ---------------------------------------------------------------- #
     @classmethod
     def ryth_30m(cls, **kw) -> "RythConfig":
@@ -116,3 +116,9 @@ class RythConfig:
     def ryth_1b(cls, **kw) -> "RythConfig":
         return cls(d_model=2048, n_layers=22, n_heads=16, n_kv_heads=8,
                    max_seq_len=4096, **kw)
+
+    @classmethod
+    def ryth_5b(cls, **kw) -> "RythConfig":
+        # Dense GQA/SwiGLU, tied 32k vocabulary: 4,930,440,192 parameters.
+        return cls(d_model=3072, n_layers=48, n_heads=24, n_kv_heads=8,
+                   ffn_hidden=8192, max_seq_len=4096, **kw)

@@ -1,6 +1,6 @@
 # Efficient pretraining research: 5B from scratch
 
-**Status:** research + proposed protocols, not an implementation or a result. **Evidence checked:** 2026-11-22; primary paper abstract pages and the linked Ryth files below were read. Numerical gates are proposed decision rules, not literature guarantees. No Ryth 5B training result or hardware measurement is claimed here.
+**Status:** research and proposed protocols; some [experimental prototypes](../../experiments/README.md) are implemented but not benchmark results. **Evidence checked:** 2026-11-22. Numerical gates are proposed decision rules, not literature guarantees. No Ryth 5B training result or hardware measurement is claimed here.
 
 ## Decision in one minute
 
@@ -13,13 +13,13 @@
 
 | Area | Existing anchor | Consequence for this study |
 |---|---|---|
-| Model | [`model/config.py`](../../model/config.py), [`docs/model.md`](../model.md): dense decoder, tied embeddings, GQA, RoPE, SwiGLU; largest preset `ryth_1b` | No 5B preset. A custom `RythConfig` and explicit count are needed. MLA is a stub, not an available optimization. |
+| Model | [`model/config.py`](../../model/config.py): dense decoder, tied embeddings, GQA, RoPE, SwiGLU; experimental `ryth_5b` preset | Count changes with vocabulary and tying; preset is not a validated 5B run. MLA is a stub. |
 | Attention | [`model/attention/gqa.py`](../../model/attention/gqa.py) repeats K/V to query-head count before PyTorch SDPA; flag selects SDPA, not a guaranteed flash kernel | Profile actual backend, copies and peak memory; fewer KV heads do not guarantee training speedup. |
-| Train | [`training/trainer.py`](../../training/trainer.py), [`training/optimizer.py`](../../training/optimizer.py), [`training/config.py`](../../training/config.py): single-device AdamW, accumulation, autocast, clipping, checkpointing, cosine | No distributed trainer or 8-bit/GaLore optimizer in this path. Those arms require separate future implementation and validation. For a prebuilt custom model, set model checkpointing in its own config. |
+| Train | [`training/trainer.py`](../../training/trainer.py), [`training/optimizer.py`](../../training/optimizer.py): single-device AdamW or experimental GaLore-style optimizer; separate experimental FSDP path | FSDP and GaLore-style implementations require GPU validation and are not equivalent to full production 5B training. No 8-bit optimizer is implemented. For a prebuilt model, configure activation checkpointing in its model config. |
 | Data | [`docs/dataset_engine.md`](../dataset_engine.md): packed RDS, file/chunk dedup, provenance; [`training/dataloader.py`](../../training/dataloader.py) supports separate validation RDS | Default random **chunk** holdout can share source documents/repos and near-duplicates. Split by source/repo before packing and audit cross-split overlaps. |
 | Tokens | Dataloader shifts each stored chunk to `ids[:-1]` / `ids[1:]`; masks may exclude targets. `TrainConfig.tokens_per_step` uses configured `seq_len` | Count actual non-ignored target positions across workers, not the configured product; report both input positions and loss-bearing targets. |
 | Eval and reproducibility | [`docs/evals.md`](../evals.md), [`docs/w2_baselines.md`](../w2_baselines.md), [`bench/README.md`](../../bench/README.md) | W2 numbers are random-weight smoke results, not trained quality. Provisional Python PPL text derives from HumanEval: never treat it as independent HumanEval validation. |
-| Resume | [`training/checkpoint.py`](../../training/checkpoint.py) saves model, optimizer, step and RNG; trainer creates a new loader iterator on resume | Do not assume exact data-order replay: test uninterrupted vs resumed token IDs, loss and optimizer state. Check scaler and sampler/iterator state explicitly; reserve storage and time for repeated saves. |
+| Resume | [`training/checkpoint.py`](../../training/checkpoint.py) stores model, optimizer, step, RNG, scaler and sampler cursor; compatibility guards check config and dataset identity | Exact continuation still requires unchanged inputs and deterministic kernels/items; callbacks and metric history are not restored. Test uninterrupted vs resumed runs and reserve storage. FSDP experiment only exports weights and cannot resume. |
 
 Ryth's [W1 runbook](../w1_runbook.md) is a **30M** code-model plan, not a 5B budget. T4 has no native BF16; use FP16 with loss scaling or FP32 and measure stability. Do not extrapolate its time estimate to 5B.
 

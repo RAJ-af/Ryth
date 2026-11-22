@@ -33,7 +33,17 @@ def build_adamw(model, config):
                              fused=use_fused)
 
 
-OPTIMIZERS = {"adamw": build_adamw}
+def build_galore(model, config):
+    from .galore import GaLoreAdamW
+
+    return GaLoreAdamW(_param_groups(model, config.weight_decay), lr=config.lr,
+                       betas=(config.beta1, config.beta2), eps=config.eps,
+                       rank=config.galore_rank,
+                       update_interval=config.galore_update_interval,
+                       scale=config.galore_scale)
+
+
+OPTIMIZERS = {"adamw": build_adamw, "galore": build_galore}
 
 
 def build_optimizer(model, config):
