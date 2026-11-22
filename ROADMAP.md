@@ -49,6 +49,11 @@ Scale the model and dataset; refine curriculum and data mixture.
 ### Phase 8 — 1B ⏳
 A larger coding-focused model built on the same foundation.
 
+### 5B research and experiments
+See the [5B research index](docs/experiments/README.md) for papers, proposed
+experiments, safety gates and measured-budget guidance. These are research plans,
+not implemented features or evidence of a trained 5B model.
+
 ## RDE v2 (post first-training-run)
 
 Deferred data-engine features, to be added after a successful training run so we
